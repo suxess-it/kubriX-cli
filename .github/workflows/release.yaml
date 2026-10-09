@@ -183,6 +183,18 @@ jobs:
           ref: ${{ needs.release-target.outputs.tag }}
           persist-credentials: false
 
+      - name: Resolve build info
+        id: build_info
+        env:
+          RELEASE_TAG: ${{ needs.release-target.outputs.tag }}
+        run: |
+          set -euo pipefail
+          {
+            echo "version=${RELEASE_TAG#v}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "date=$(git log -1 --format=%cI)"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
@@ -201,6 +213,10 @@ jobs:
           file: ./container/Dockerfile
           platforms: linux/amd64,linux/arm64
           target: production
+          build-args: |
+            RELEASE_VERSION=${{ steps.build_info.outputs.version }}
+            GIT_HASH=${{ steps.build_info.outputs.commit }}
+            BUILD_TIME=${{ steps.build_info.outputs.date }}
           tags: |
             ${{ env.IMAGE_TAG }}
           builder: ${{ steps.buildx.outputs.name }}

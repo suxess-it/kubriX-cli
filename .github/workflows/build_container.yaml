@@ -88,9 +88,10 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=dev-${{ env.DATETIME }}
+          # The version of a dev image is the dev build, as the binary reports it; not the branch name.
+          labels: |
+            org.opencontainers.image.version=dev-${{ env.DATETIME }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -118,5 +119,6 @@ jobs:
             RELEASE_VERSION=dev-${{ env.DATETIME }}
             BUILD_TIME=${{ env.BUILD_TIME }}
           tags: |
+            ${{ steps.meta.outputs.tags }}
             ${{ env.REGISTRY_IMAGE }}:${{ env.DATETIME }}
           labels: ${{ steps.meta.outputs.labels }}

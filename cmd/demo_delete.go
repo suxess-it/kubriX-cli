@@ -11,13 +11,13 @@ import (
 	"github.com/suxess-it/kubrix-cli/internal/ui"
 )
 
-func newDemoDeleteCmd() *cobra.Command {
+func newDemoDeleteCmd(f Features) *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete",
 		Short: "Delete a demo's kind cluster, or forget an installation; optionally delete its GitHub repository",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withUI(cmd, "delete", func(ctx context.Context, u ui.UI) error { return runDemoDelete(ctx, u, productionServices()) })
+			return withUI(cmd, "delete", func(ctx context.Context, u ui.UI) error { return runDemoDelete(ctx, u, productionServices(f)) })
 		},
 	}
 }
@@ -28,6 +28,9 @@ func runDemoDelete(ctx context.Context, u ui.UI, svc services) error {
 		return fmt.Errorf("cannot delete from the saved installations: %w", err)
 	}
 	names := catalog.Keys()
+	if !svc.experimental {
+		names = catalog.Demos()
+	}
 	if len(names) == 0 {
 		return errors.New("no saved installation found; nothing to delete")
 	}

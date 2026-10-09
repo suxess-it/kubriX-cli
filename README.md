@@ -2,9 +2,11 @@
 
 `kubrix` sets up and maintains kubriX platforms in one interactive run:
 
-- `kubrix demo`: a demo platform on a local [kind](https://kind.sigs.k8s.io/) cluster.
-- `kubrix install`: kubriX on an existing cluster (one of your kubeconfig contexts).
-- `kubrix upgrade`: upgrades an installation to a newer kubriX release by opening a pull request in its repository.
+- `kubrix demo`: a demo platform on a local [kind](https://kind.sigs.k8s.io/) cluster, and `kubrix demo delete` to remove it again.
+- `kubrix install` (experimental): kubriX on an existing cluster (one of your kubeconfig contexts).
+- `kubrix upgrade` (experimental): upgrades an installation to a newer kubriX release by opening a pull request in its repository.
+
+`install` and `upgrade` are experimental: they are hidden, and refuse to run, unless you set `KUBRIX_EXPERIMENTAL=1`. The menu and `demo delete` then show installations on existing clusters as well; without it they only know demos.
 
 They replace the manual steps: creating the GitHub repository, writing the `kubrix-install-secrets` Secret, running the installer job, and merging upstream releases by hand.
 
@@ -38,6 +40,8 @@ go run . demo              # or: go build -o kubrix . && ./kubrix demo
 go run . install
 go run . upgrade
 ```
+
+`kubrix --version` prints the release, the commit and the build date. Release builds get them from linker flags (`-X main.version`, `-X main.commit`, `-X main.date`, set by GoReleaser and `container/Dockerfile`); a plain `go build` falls back to what the Go toolchain embeds.
 
 Running `kubrix` without a command opens a menu in a terminal. When output is piped or there is no terminal, it prints the usage instead.
 

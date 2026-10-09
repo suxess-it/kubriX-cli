@@ -28,13 +28,17 @@ const (
 
 var domainRe = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)+[a-z]{2,}$`)
 
-func newInstallCmd() *cobra.Command {
+func newInstallCmd(f Features) *cobra.Command {
 	return &cobra.Command{
-		Use:   "install",
-		Short: "Install kubriX on an existing cluster (a kubeconfig context)",
-		Args:  cobra.NoArgs,
+		Use:    "install",
+		Short:  "Install kubriX on an existing cluster (a kubeconfig context) (experimental)",
+		Args:   cobra.NoArgs,
+		Hidden: !f.Experimental,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withUI(cmd, "install", func(ctx context.Context, u ui.UI) error { return runInstall(ctx, u, productionServices()) })
+			if err := f.requireExperimental("install"); err != nil {
+				return err
+			}
+			return withUI(cmd, "install", func(ctx context.Context, u ui.UI) error { return runInstall(ctx, u, productionServices(f)) })
 		},
 	}
 }

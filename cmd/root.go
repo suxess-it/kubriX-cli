@@ -14,19 +14,20 @@ import (
 	"github.com/suxess-it/kubrix-cli/internal/ui"
 )
 
-func NewRoot() *cobra.Command {
+func NewRoot(build BuildInfo, features Features) *cobra.Command {
 	root := &cobra.Command{
 		Use:          "kubrix",
 		Short:        "kubriX command line tool",
+		Version:      build.String(),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !isInteractive() {
 				return cmd.Help()
 			}
 			showHelp := false
-			svc := productionServices()
+			svc := productionServices(features)
 			err := withUI(cmd, "kubriX", func(ctx context.Context, u ui.UI) error {
-				choice, err := menu(u, openCatalog(u))
+				choice, err := menu(u, openCatalog(u), features)
 				if err != nil {
 					return err
 				}
@@ -50,10 +51,11 @@ func NewRoot() *cobra.Command {
 			return err
 		},
 	}
+	root.SetVersionTemplate("kubrix version {{.Version}}\n")
 	root.PersistentFlags().Bool("plain", false, "print line by line instead of using the full-screen interface")
-	demo := newDemoCmd()
-	demo.AddCommand(newDemoDeleteCmd())
-	root.AddCommand(demo, newInstallCmd(), newUpgradeCmd())
+	demo := newDemoCmd(features)
+	demo.AddCommand(newDemoDeleteCmd(features))
+	root.AddCommand(demo, newInstallCmd(features), newUpgradeCmd(features))
 	return root
 }
 
@@ -86,23 +88,31 @@ func isInteractive() bool {
 	return true
 }
 
-func menu(u ui.UI, catalog *state.Catalog) (string, error) {
+func menu(u ui.UI, catalog *state.Catalog, features Features) (string, error) {
+	// Without the experimental features only demos exist as far as the user can tell.
+	keys := catalog.Keys()
+	if !features.Experimental {
+		keys = catalog.Demos()
+	}
 	description := "Nothing installed yet."
-	if catalog.Len() > 0 {
-		description = fmt.Sprintf("Saved installations: %d", catalog.Len())
-		if last, ok := catalog.Last(); ok {
+	if len(keys) > 0 {
+		description = fmt.Sprintf("Saved installations: %d", len(keys))
+		if last, ok := catalog.Find(keys[0]); ok {
 			description += fmt.Sprintf(" (last: %s/%s on %s)", last.Org, last.Repo, last.Where())
 		}
 	}
+	options := []ui.Option{{Label: "Set up a kind demo platform", Value: "demo"}}
+	if features.Experimental {
+		options = append(options,
+			ui.Option{Label: "Install on an existing cluster (experimental)", Value: "install"},
+			ui.Option{Label: "Upgrade an installation (opens a pull request) (experimental)", Value: "upgrade"},
+			ui.Option{Label: "Delete a demo / forget an installation", Value: "delete"})
+	} else {
+		options = append(options, ui.Option{Label: "Delete a demo", Value: "delete"})
+	}
+	options = append(options, ui.Option{Label: "Show help", Value: "help"}, ui.Option{Label: "Quit", Value: "quit"})
 	choice := "demo"
-	err := ui.Select(u, "What do you want to do?", description, []ui.Option{
-		{Label: "Set up a kind demo platform", Value: "demo"},
-		{Label: "Install on an existing cluster", Value: "install"},
-		{Label: "Upgrade an installation (opens a pull request)", Value: "upgrade"},
-		{Label: "Delete a demo / forget an installation", Value: "delete"},
-		{Label: "Show help", Value: "help"},
-		{Label: "Quit", Value: "quit"},
-	}, &choice)
+	err := ui.Select(u, "What do you want to do?", description, options, &choice)
 	if errors.Is(err, ui.ErrAborted) {
 		return "", ui.ErrQuit
 	}

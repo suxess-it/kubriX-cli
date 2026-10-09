@@ -1,0 +1,60 @@
+# Build output
+/kubrix
+/kubrix-cli
+/kubrix.exe
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go tests and tooling
+*.test
+*.out
+coverage.*
+cover.html
+profile.cov
+go.work
+go.work.sum
+
+# devenv and direnv (devenv.nix, devenv.yaml, devenv.lock and .envrc are committed)
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+.direnv/
+.pre-commit-config.yaml
+result
+result-*
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/kubeconfig
+*.kubeconfig
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Operating systems
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Local scratch
+/tmp/
+*.log

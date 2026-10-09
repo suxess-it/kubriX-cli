@@ -23,13 +23,13 @@ const kindDomain = "127-0-0-1.nip.io"
 
 var untestedTargets = []string{"kind", "kind-base", "kind-delivery", "kind-observability", "kind-portal", "kind-security"}
 
-func newDemoCmd() *cobra.Command {
+func newDemoCmd(f Features) *cobra.Command {
 	return &cobra.Command{
 		Use:   "demo",
 		Short: "Bootstrap a kubriX demo platform on a local kind cluster",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withUI(cmd, "kind demo", func(ctx context.Context, u ui.UI) error { return runDemo(ctx, u, productionServices()) })
+			return withUI(cmd, "kind demo", func(ctx context.Context, u ui.UI) error { return runDemo(ctx, u, productionServices(f)) })
 		},
 	}
 }

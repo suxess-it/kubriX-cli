@@ -424,15 +424,15 @@ func TestPickUpgradeRepo(t *testing.T) {
 }
 
 func TestMenuMapsCancelToQuit(t *testing.T) {
-	choice, err := menu(uitest.New(nil), catalogWith(t))
+	choice, err := menu(uitest.New(nil), catalogWith(t), Features{Experimental: true})
 	if err != nil || choice != "demo" {
 		t.Errorf("default %q %v", choice, err)
 	}
-	choice, err = menu(uitest.New(map[string]any{"What do you want to do?": "upgrade"}), catalogWith(t))
+	choice, err = menu(uitest.New(map[string]any{"What do you want to do?": "upgrade"}), catalogWith(t), Features{Experimental: true})
 	if err != nil || choice != "upgrade" {
 		t.Errorf("chosen %q %v", choice, err)
 	}
-	if _, err := menu(uitest.New(map[string]any{"What do you want to do?": uitest.Abort}), catalogWith(t)); !errors.Is(err, ui.ErrQuit) {
+	if _, err := menu(uitest.New(map[string]any{"What do you want to do?": uitest.Abort}), catalogWith(t), Features{Experimental: true}); !errors.Is(err, ui.ErrQuit) {
 		t.Errorf("cancelling the menu quits: %v", err)
 	}
 }

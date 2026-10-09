@@ -36,10 +36,14 @@ type services struct {
 	contexts func() ([]kubeconfig.Context, string, error)
 	// cluster connects to the cluster of a kubeconfig context.
 	cluster func(contextName string) (clusterAccess, error)
+	// experimental says the experimental commands are enabled, so the saved installations on existing
+	// clusters are shown too, not only the demos.
+	experimental bool
 }
 
-func productionServices() services {
+func productionServices(f Features) services {
 	return services{
+		experimental: f.Experimental,
 		github: func(ctx context.Context, u ui.UI) (githubAPI, string, error) {
 			gh, login, err := githubClient(ctx, u)
 			if err != nil {

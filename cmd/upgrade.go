@@ -19,13 +19,17 @@ import (
 
 const otherRepo = "\x00other"
 
-func newUpgradeCmd() *cobra.Command {
+func newUpgradeCmd(f Features) *cobra.Command {
 	return &cobra.Command{
-		Use:   "upgrade",
-		Short: "Upgrade a kubriX installation by opening a pull request in its repository",
-		Args:  cobra.NoArgs,
+		Use:    "upgrade",
+		Short:  "Upgrade a kubriX installation by opening a pull request in its repository (experimental)",
+		Args:   cobra.NoArgs,
+		Hidden: !f.Experimental,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withUI(cmd, "upgrade", func(ctx context.Context, u ui.UI) error { return runUpgrade(ctx, u, productionServices()) })
+			if err := f.requireExperimental("upgrade"); err != nil {
+				return err
+			}
+			return withUI(cmd, "upgrade", func(ctx context.Context, u ui.UI) error { return runUpgrade(ctx, u, productionServices(f)) })
 		},
 	}
 }

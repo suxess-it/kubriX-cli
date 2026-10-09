@@ -74,6 +74,7 @@ func newWorld(t *testing.T) *world {
 		docker:         func() (kindcluster.Resources, error) { return w.docker, nil },
 		contexts:       func() ([]kubeconfig.Context, string, error) { return w.contexts, w.current, nil },
 		cluster:        func(string) (clusterAccess, error) { return w.cluster, nil },
+		experimental:   true,
 	}
 	return w
 }
