@@ -5,40 +5,40 @@
 class Kubrix < Formula
   desc ""
   homepage "https://kubrix.io"
-  version "0.1.0"
+  version "0.1.1"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.0/kubriX-cli_Darwin_x86_64.tar.gz"
-      sha256 "ad56ecb8003ce4c31122899c83563ba927a1116aa41d3aacaae9f5060c0e7155"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.1/kubriX-cli_Darwin_x86_64.tar.gz"
+      sha256 "8d4128783e279228d34c97d2f533173b803a9c5f62c593bddad2d3d205fcf768"
 
       define_method(:install) do
-        bin.install "kubriX-cli"
+        bin.install "kubrix"
       end
     end
     if Hardware::CPU.arm?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.0/kubriX-cli_Darwin_arm64.tar.gz"
-      sha256 "de7513ea2e563607dce4e9523435bb885a2703531770cba8abe9c6ebe90e1038"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.1/kubriX-cli_Darwin_arm64.tar.gz"
+      sha256 "1d9a06092428f6a649c910facefe3af76f0a0294a7a4eb223d90c3798a8d62b0"
 
       define_method(:install) do
-        bin.install "kubriX-cli"
+        bin.install "kubrix"
       end
     end
   end
 
   on_linux do
     if Hardware::CPU.intel? && Hardware::CPU.is_64_bit?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.0/kubriX-cli_Linux_x86_64.tar.gz"
-      sha256 "8d21ff1b8768587f5ebf0bd36f8e2c717b8361b2b33030715a544dcdd21a5674"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.1/kubriX-cli_Linux_x86_64.tar.gz"
+      sha256 "8500640b26c2c4085332449c59b267e4ca644a6a04c4d9b331a55955e97f09dc"
       define_method(:install) do
-        bin.install "kubriX-cli"
+        bin.install "kubrix"
       end
     end
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.0/kubriX-cli_Linux_arm64.tar.gz"
-      sha256 "29d11de8dff2d6b28a188eebc076559b3b1a5b5c6d5ce9f66a6b298b164405ab"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.1/kubriX-cli_Linux_arm64.tar.gz"
+      sha256 "bd6259bd3eb2ea74916e7e6a7ce8069a3978b9d939282fd102ec98e4d934df74"
       define_method(:install) do
-        bin.install "kubriX-cli"
+        bin.install "kubrix"
       end
     end
   end
