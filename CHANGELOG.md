@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/suxess-it/kubriX-cli/compare/v0.1.0...v0.1.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **cli:** name of the cli in goreleases ([4ac4d9e](https://github.com/suxess-it/kubriX-cli/commit/4ac4d9e46e2f8344f218b403006560ec3c9523da))
+
 ## 0.1.0 (2026-10-09)
 
 
