@@ -122,3 +122,6 @@ jobs:
             ${{ steps.meta.outputs.tags }}
             ${{ env.REGISTRY_IMAGE }}:${{ env.DATETIME }}
           labels: ${{ steps.meta.outputs.labels }}
+          # One layer cache for dev and release images, so the module download layer is reused across runs.
+          cache-from: type=gha,scope=container
+          cache-to: type=gha,mode=max,scope=container

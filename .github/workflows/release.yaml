@@ -149,6 +149,8 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: "~1.26"
+          cache: true
+          cache-dependency-path: go.sum
       - name: Download Syft
         uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
       - name: Run GoReleaser
@@ -221,8 +223,9 @@ jobs:
             ${{ env.IMAGE_TAG }}
           builder: ${{ steps.buildx.outputs.name }}
           push: true
-          cache-from: type=gha,scope=${{ github.ref_name }}-${{ env.IMAGE_TAG }}
-          cache-to: type=gha,scope=${{ github.ref_name }}-${{ env.IMAGE_TAG }}
+          # The same layer cache as the dev images. A scope per tag would never be reused by the next release.
+          cache-from: type=gha,scope=container
+          cache-to: type=gha,mode=max,scope=container
 
       - name: Generate SBOM
         uses: anchore/sbom-action@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
