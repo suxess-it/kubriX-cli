@@ -1,0 +1,73 @@
+version: 2
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate
+    - go generate ./...
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.Date={{.CommitDate}}
+
+nfpms:
+  - file_name_template: "{{ .ProjectName }}_{{ .Arch }}"
+    maintainer: "KubriX Maintainers <kubrix@suxess-it.com>"
+    homepage: https://kubrix.io
+    description: >-
+      kubriX accelerates software delivery by providing a curated, opinionated Internal Developer Platform built on proven open-source components. It enables platform teams to build, operate, and evolve an IDP that scales with their organization - without starting from scratch.
+    license: "Apache-2.0"
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: utils
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/doc/kubrix/copyright
+        file_info:
+          mode: 0644
+
+sboms:
+  - artifacts: archive
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of uname.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+
+brews:
+  - name: kubrix
+    homepage: https://kubrix.io
+    directory: Formula
+    repository:
+      owner: suxess-it
+      name: kubrix-cli
+      branch: main
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
