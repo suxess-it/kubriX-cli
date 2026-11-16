@@ -33,14 +33,22 @@ func TargetValuesPath(targetType string) string {
 	return "platform-apps/target-chart/values-" + targetType + ".yaml"
 }
 
-// TemplateApps renders a target values template as the bootstrap would for the given config and returns the
-// applications it lists.
-func TemplateApps(name string, tmpl []byte, in ConfigInput) ([]string, error) {
+// DefaultValuesPath is the target chart's defaults file. A map-format target values file only overrides its applications.
+const DefaultValuesPath = "platform-apps/target-chart/values-kubrix-default.yaml"
+
+// RenderTemplate renders a template as the bootstrap would for the given config.
+func RenderTemplate(name string, tmpl []byte, in ConfigInput) ([]byte, error) {
 	cfg, err := ParseConfig(CustomerConfig(in))
 	if err != nil {
 		return nil, err
 	}
-	rendered, err := Template(name, tmpl, cfg)
+	return Template(name, tmpl, cfg)
+}
+
+// TemplateApps renders a target values template as the bootstrap would for the given config and returns the
+// applications it lists.
+func TemplateApps(name string, tmpl []byte, in ConfigInput) ([]string, error) {
+	rendered, err := RenderTemplate(name, tmpl, in)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +136,11 @@ func (r *Repo) ExcludedApps(targetType string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	all, err := Apps(full)
+	defaults, err := os.ReadFile(filepath.Join(r.dir, DefaultValuesPath))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	all, err := AppsLayered(defaults, full)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +148,7 @@ func (r *Repo) ExcludedApps(targetType string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	present, err := Apps(rendered)
+	present, err := AppsLayered(defaults, rendered)
 	if err != nil {
 		return nil, err
 	}

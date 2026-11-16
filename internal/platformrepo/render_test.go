@@ -95,11 +95,21 @@ func ossApps(t *testing.T, clusterType string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apps, err := Apps(out)
+	apps, err := AppsLayered(kubrixDefaults(t), out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return apps
+}
+
+// kubrixDefaults reads the target chart's defaults file of the kubriX repository; nil when it has none (list format).
+func kubrixDefaults(t *testing.T) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(testrepo.KubrixRepo(t), DefaultValuesPath))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func TestOSSStackAppsPerClusterType(t *testing.T) {
@@ -128,9 +138,10 @@ func TestApplyExcludes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, _ := Apps(rendered)
+	defaults := kubrixDefaults(t)
+	before, _ := AppsLayered(defaults, rendered)
 	out := ApplyExcludes(rendered, []string{"kargo", "external-dns", "team-onboarding"})
-	after, err := Apps(out)
+	after, err := AppsLayered(defaults, out)
 	if err != nil {
 		t.Fatalf("result is not valid YAML: %v", err)
 	}
@@ -145,6 +156,88 @@ func TestApplyExcludes(t *testing.T) {
 	}
 	if got := ApplyExcludes(rendered, nil); string(got) != string(rendered) {
 		t.Error("no excludes must not change the file")
+	}
+}
+
+const mapDefaults = `applications:
+  traefik:
+    enabled: true
+  argocd:
+    enabled: true
+  kargo:
+    enabled: false
+`
+
+const mapProfile = `applicationMap: true
+applications:
+
+  kargo:
+    enabled: true
+    annotations:
+      argocd.argoproj.io/sync-wave: "1"
+
+  backstage:
+    valueFiles:
+    - values-x.yaml
+    enabled: true
+
+  grafana:
+    annotations: {}
+
+other: value
+`
+
+func TestAppsOfAMap(t *testing.T) {
+	if got, err := Apps([]byte(mapProfile)); err != nil || !slices.Equal(got, []string{"backstage", "kargo"}) {
+		t.Errorf("profile alone: %v %v", got, err)
+	}
+	if got, err := AppsLayered([]byte(mapDefaults), []byte(mapProfile)); err != nil || !slices.Equal(got, []string{"argocd", "backstage", "kargo", "traefik"}) {
+		t.Errorf("layered: %v %v", got, err)
+	}
+	if got, err := AppsLayered([]byte(mapDefaults), []byte("applications:\n  - name: kargo\n")); err != nil || !slices.Equal(got, []string{"kargo"}) {
+		t.Errorf("a list replaces the defaults: %v %v", got, err)
+	}
+	if got, err := Apps([]byte("applications:\n  - name: b\n  - name: a\n")); err != nil || !slices.Equal(got, []string{"b", "a"}) {
+		t.Errorf("a list keeps its order: %v %v", got, err)
+	}
+}
+
+func TestApplyExcludesOfAMap(t *testing.T) {
+	// kargo has `enabled`, grafana has none, traefik is only enabled by the defaults.
+	out := ApplyExcludes([]byte(mapProfile), []string{"kargo", "grafana", "traefik"})
+	got, err := AppsLayered([]byte(mapDefaults), out)
+	if err != nil {
+		t.Fatalf("result is not valid YAML: %v\n%s", err, out)
+	}
+	if !slices.Equal(got, []string{"argocd", "backstage"}) {
+		t.Errorf("got %v\n%s", got, out)
+	}
+	want := `applicationMap: true
+applications:
+
+  kargo:
+    enabled: false
+    annotations:
+      argocd.argoproj.io/sync-wave: "1"
+
+  backstage:
+    valueFiles:
+    - values-x.yaml
+    enabled: true
+
+  grafana:
+    enabled: false
+    annotations: {}
+
+  traefik:
+    enabled: false
+other: value
+`
+	if string(out) != want {
+		t.Errorf("got\n%s\nwant\n%s", out, want)
+	}
+	if got := ApplyExcludes([]byte("applications:\n  a:\n    enabled: true"), []string{"b"}); string(got) != "applications:\n  a:\n    enabled: true\n  b:\n    enabled: false\n" {
+		t.Errorf("appending at the end of the file: %q", got)
 	}
 }
 
