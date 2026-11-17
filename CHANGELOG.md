@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.2](https://github.com/suxess-it/kubriX-cli/compare/v0.1.1...v0.1.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* make the cli work with the application map ([ffc11ba](https://github.com/suxess-it/kubriX-cli/commit/ffc11ba857a3d70272f354b285266db32c5614f6))
+* make the cli work with the application map ([af25fd7](https://github.com/suxess-it/kubriX-cli/commit/af25fd713ade55519460b2fbed0e5a86a7c21b45))
+* versioning tests for ci ([31d0e9f](https://github.com/suxess-it/kubriX-cli/commit/31d0e9f8bf382affab117bd912177d9ec4a50330))
+
 ## [0.1.1](https://github.com/suxess-it/kubriX-cli/compare/v0.1.0...v0.1.1) (2026-10-09)
 
 
