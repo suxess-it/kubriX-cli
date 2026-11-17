@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,9 @@ func TestTokenOnlyInHeaderEnv(t *testing.T) {
 
 func TestRunAndLines(t *testing.T) {
 	ctx := context.Background()
+	// Ignore the developer's global git config (e.g. commit signing).
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	g := New(t.TempDir(), "", "bot", "bot@example.com")
 	if _, err := g.Run(ctx, "init", "-q", "-b", "main"); err != nil {
 		t.Fatal(err)

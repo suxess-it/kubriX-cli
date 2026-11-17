@@ -193,6 +193,56 @@ func TestExcludedAppsFindsWhatExcludeLeftOut(t *testing.T) {
 	}
 }
 
+const mapTargetTemplate = `applicationMap: true
+applications:
+
+  kargo:
+    enabled: true
+
+  {{ if ne .kubriX.clusterType "kind" -}}
+  external-dns:
+    enabled: true
+  {{ end -}}
+
+  backstage:
+    enabled: true
+`
+
+func TestExcludedAppsFindsWhatExcludeDisabledInAMap(t *testing.T) {
+	for name, exclude := range map[string][]string{
+		"nothing":          nil,
+		"profile app":      {"kargo"},
+		"default app":      {"traefik"},
+		"app of this type": {"external-dns", "backstage"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			target := TargetValuesPath("kubrix-oss-stack")
+			r := checkout(t, map[string]string{
+				TemplatePath(target): mapTargetTemplate,
+				DefaultValuesPath:    "applications:\n  traefik:\n    enabled: true\n  kargo:\n    enabled: false\n",
+			})
+			if err := r.WriteConfig(testInput); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.RenderAll(); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Exclude("kubrix-oss-stack", exclude); err != nil {
+				t.Fatal(err)
+			}
+			got, err := r.ExcludedApps("kubrix-oss-stack")
+			if err != nil {
+				t.Fatal(err)
+			}
+			slices.Sort(got)
+			want := slices.Sorted(slices.Values(exclude))
+			if len(got)+len(want) > 0 && !slices.Equal(got, want) {
+				t.Errorf("got %v, want %v\n%s", got, want, read(t, r, target))
+			}
+		})
+	}
+}
+
 func TestExcludeLeavesTheRestOfTheFileUntouched(t *testing.T) {
 	full := bootstrapped(t, nil)
 	cut := bootstrapped(t, []string{"kargo"})

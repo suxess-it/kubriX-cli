@@ -70,9 +70,19 @@ func (s Source) Apps(ctx context.Context, repo, ref, targetType, clusterType str
 			continue
 		}
 		if platformrepo.IsTemplate(path) {
-			return platformrepo.TemplateApps(path, data, platformrepo.ConfigInput{ClusterType: clusterType, DNSProvider: "none"})
+			if data, err = platformrepo.RenderTemplate(path, data, platformrepo.ConfigInput{ClusterType: clusterType, DNSProvider: "none"}); err != nil {
+				return nil, err
+			}
 		}
-		return platformrepo.Apps(data)
+		// A map-format values file only overrides the defaults' applications.
+		defaults, status, err := s.fetch(ctx, repo, ref, platformrepo.DefaultValuesPath)
+		if err != nil {
+			return nil, err
+		}
+		if status != http.StatusOK {
+			defaults = nil
+		}
+		return platformrepo.AppsLayered(defaults, data)
 	}
 	return nil, fmt.Errorf("no values file for target type %q on %s@%s", targetType, repo, ref)
 }

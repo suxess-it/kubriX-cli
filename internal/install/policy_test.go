@@ -56,7 +56,11 @@ func TestDependenciesExistInOSSStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apps, err := platformrepo.Apps(rendered)
+	defaults, err := os.ReadFile(filepath.Join(testrepo.KubrixRepo(t), platformrepo.DefaultValuesPath))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	apps, err := platformrepo.AppsLayered(defaults, rendered)
 	if err != nil {
 		t.Fatal(err)
 	}

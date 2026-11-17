@@ -50,8 +50,12 @@ func TestChangelogBetweenOnRepoChangelog(t *testing.T) {
 	if got := ChangelogBetween(string(data), "7.0.0", "7.0.0"); got != "" {
 		t.Errorf("same version must give no notes, got %d bytes", len(got))
 	}
-	if got := ChangelogBetween(string(data), "6.0.0", ""); !strings.HasPrefix(got, "## [7.0.0]") {
-		t.Error("open-ended range must include newer sections")
+	// Upstream keeps releasing, so the open-ended range must start at whatever the newest section is.
+	newest := string(data)[strings.Index(string(data), "## ["):]
+	newest = newest[:strings.Index(newest, "]")+1]
+	got := ChangelogBetween(string(data), "6.0.0", "")
+	if !strings.HasPrefix(got, newest) || !strings.Contains(got, "## [7.0.0]") || strings.Contains(got, "## [6.0.0]") {
+		t.Errorf("open-ended range must include all sections newer than 6.0.0, starting at %s", newest)
 	}
 }
 

@@ -90,8 +90,19 @@ func TestSourceAppsFallsBackToAPlainValuesFile(t *testing.T) {
 	if err != nil || !slices.Equal(apps, []string{"argocd"}) {
 		t.Errorf("%v %v", apps, err)
 	}
-	if got := rs.seen(); len(got) != 2 || !strings.Contains(got[0], ".yaml.tmpl") {
-		t.Errorf("the template is tried first: %v", got)
+	if got := rs.seen(); len(got) != 3 || !strings.Contains(got[0], ".yaml.tmpl") || !strings.Contains(got[2], "values-kubrix-default.yaml") {
+		t.Errorf("the template is tried first, the defaults are read last: %v", got)
+	}
+}
+
+func TestSourceAppsLayersAMapOverTheDefaults(t *testing.T) {
+	rs := newRawServer(t, map[string]string{
+		"/o/r/refs/heads/main/platform-apps/target-chart/values-kubrix-default.yaml": "applications:\n  argocd:\n    enabled: true\n  kargo:\n    enabled: false\n  grafana:\n    enabled: true\n",
+		"/o/r/refs/heads/main/platform-apps/target-chart/values-kind.yaml.tmpl":      "applicationMap: true\napplications:\n  kargo:\n    enabled: true\n  grafana:\n    enabled: false\n",
+	}, nil)
+	apps, err := Source{RawURL: rs.URL}.Apps(context.Background(), "o/r", "main", "kind", "kind")
+	if err != nil || !slices.Equal(apps, []string{"argocd", "kargo"}) {
+		t.Errorf("%v %v", apps, err)
 	}
 }
 

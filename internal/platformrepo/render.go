@@ -2,12 +2,14 @@ package platformrepo
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -160,9 +162,14 @@ func renderTree(root string, cfg map[string]any) error {
 	return renderFiles(root, tmpls, cfg)
 }
 
-var appStart = regexp.MustCompile(`^  - name:\s*["']?([A-Za-z0-9._-]+)`)
+var (
+	appStart    = regexp.MustCompile(`^  - name:\s*["']?([A-Za-z0-9._-]+)`)
+	appKey      = regexp.MustCompile(`^  ["']?([A-Za-z0-9._-]+)["']?:\s*(#.*)?$`)
+	enabledLine = regexp.MustCompile(`^    enabled:`)
+)
 
-// ApplyExcludes removes the named entries from `.applications` of a rendered target values file.
+// ApplyExcludes leaves the named apps out of `.applications` of a rendered target values file: list entries are
+// removed, map entries get `enabled: false` (like install-platform.sh), so apps enabled by the defaults are disabled too.
 // It edits line-wise to keep the rest of the file byte-identical.
 func ApplyExcludes(data []byte, exclude []string) []byte {
 	if len(exclude) == 0 {
@@ -171,6 +178,9 @@ func ApplyExcludes(data []byte, exclude []string) []byte {
 	excluded := map[string]bool{}
 	for _, e := range exclude {
 		excluded[e] = true
+	}
+	if _, m, err := parseApps(data); err == nil && m != nil {
+		return disableApps(data, exclude, excluded)
 	}
 	var out []string
 	inApps, dropping := false, false
@@ -193,19 +203,131 @@ func ApplyExcludes(data []byte, exclude []string) []byte {
 	return []byte(strings.Join(out, ""))
 }
 
-// Apps returns `.applications[].name` of a rendered target values file.
-func Apps(rendered []byte) ([]string, error) {
+// disableApps sets `enabled: false` on the excluded apps of a map-format `.applications`. Apps without an entry
+// (enabled by the defaults file) get one appended at the end of the block.
+func disableApps(data []byte, exclude []string, excluded map[string]bool) []byte {
+	var out []string
+	seen := map[string]bool{}
+	appendMissing := func() {
+		if n := len(out); n > 0 && out[n-1] != "" && !strings.HasSuffix(out[n-1], "\n") {
+			out[n-1] += "\n"
+		}
+		for _, app := range exclude {
+			if !seen[app] {
+				seen[app] = true
+				out = append(out, "  "+app+":\n", "    enabled: false\n")
+			}
+		}
+	}
+	inApps, disabling := false, false
+	for _, line := range strings.SplitAfter(string(data), "\n") {
+		trimmed := strings.TrimRight(line, "\n")
+		switch {
+		case trimmed == "applications:":
+			inApps, disabling = true, false
+		case inApps && trimmed != "" && !strings.HasPrefix(trimmed, " "):
+			appendMissing()
+			inApps, disabling = false, false
+		case inApps:
+			if m := appKey.FindStringSubmatch(trimmed); m != nil {
+				disabling = excluded[m[1]]
+				if disabling {
+					seen[m[1]] = true
+					out = append(out, line, "    enabled: false\n")
+					continue
+				}
+			} else if disabling && enabledLine.MatchString(trimmed) {
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	if inApps {
+		appendMissing()
+	}
+	return []byte(strings.Join(out, ""))
+}
+
+// appMap is `.applications` in the map format: application name to its `enabled` flag (nil when unset).
+type appMap map[string]*bool
+
+// parseApps reads `.applications` of a values file. It returns the names of a list, or the entries of a map.
+func parseApps(data []byte) (list []string, m appMap, err error) {
 	var doc struct {
-		Applications []struct {
+		Applications json.RawMessage `json:"applications"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, nil, err
+	}
+	raw := bytes.TrimSpace(doc.Applications)
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil, nil
+	}
+	if raw[0] == '[' {
+		var apps []struct {
 			Name string `json:"name"`
-		} `json:"applications"`
+		}
+		if err := json.Unmarshal(raw, &apps); err != nil {
+			return nil, nil, err
+		}
+		for _, a := range apps {
+			list = append(list, a.Name)
+		}
+		return list, nil, nil
 	}
-	if err := yaml.Unmarshal(rendered, &doc); err != nil {
-		return nil, err
+	var entries map[string]*struct {
+		Enabled *bool `json:"enabled"`
 	}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil, nil, err
+	}
+	m = appMap{}
+	for name, e := range entries {
+		m[name] = nil
+		if e != nil {
+			m[name] = e.Enabled
+		}
+	}
+	return nil, m, nil
+}
+
+// enabled returns the names the target chart installs from a map: those with `enabled: true`, sorted like Helm's range.
+func (m appMap) enabled() []string {
 	var names []string
-	for _, a := range doc.Applications {
-		names = append(names, a.Name)
+	for name, on := range m {
+		if on != nil && *on {
+			names = append(names, name)
+		}
 	}
-	return names, nil
+	slices.Sort(names)
+	return names
+}
+
+// Apps returns the applications of a rendered target values file: `.applications[].name` of a list, or the
+// enabled entries of a map. A map profile only holds overrides; use AppsLayered to include the defaults.
+func Apps(rendered []byte) ([]string, error) {
+	return AppsLayered(nil, rendered)
+}
+
+// AppsLayered returns the applications installed by a target values file layered over the defaults file
+// (values-kubrix-default.yaml), as the bootstrap Application passes them to the target chart.
+// A list-format profile replaces the defaults' applications, so they are ignored.
+func AppsLayered(defaults, profile []byte) ([]string, error) {
+	list, m, err := parseApps(profile)
+	if err != nil || m == nil {
+		return list, err
+	}
+	_, merged, err := parseApps(defaults)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", DefaultValuesPath, err)
+	}
+	if merged == nil {
+		merged = appMap{}
+	}
+	for name, on := range m {
+		if on != nil || merged[name] == nil {
+			merged[name] = on
+		}
+	}
+	return merged.enabled(), nil
 }
