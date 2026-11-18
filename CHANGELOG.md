@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/suxess-it/kubriX-cli/compare/v0.1.2...v0.1.3) (2026-11-18)
+
+
+### Features
+
+* add non-interactive install mode ([f0cad82](https://github.com/suxess-it/kubriX-cli/commit/f0cad82b97fd1148b31bd037f43cee6de2e4a00e))
+
 ## [0.1.2](https://github.com/suxess-it/kubriX-cli/compare/v0.1.1...v0.1.2) (2026-11-17)
 
 
