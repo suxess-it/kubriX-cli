@@ -37,6 +37,8 @@ type world struct {
 	current   string
 	githubErr error
 	svc       services
+	// githubTokens and upstreamTokens are the tokens GitHub and the kubriX source were reached with.
+	githubTokens, upstreamTokens []string
 }
 
 func newWorld(t *testing.T) *world {
@@ -68,7 +70,14 @@ func newWorld(t *testing.T) *world {
 			}
 			return w.host, "octocat", nil
 		},
-		upstream:       func(git.Host) install.Upstream { return w.upstream },
+		githubToken: func(token string) (githubAPI, error) {
+			w.githubTokens = append(w.githubTokens, token)
+			return w.host, w.githubErr
+		},
+		upstream: func(token string) install.Upstream {
+			w.upstreamTokens = append(w.upstreamTokens, token)
+			return w.upstream
+		},
 		upstreamGitURL: func(string) string { return w.upstream.URL },
 		kind:           w.kind,
 		docker:         func() (kindcluster.Resources, error) { return w.docker, nil },

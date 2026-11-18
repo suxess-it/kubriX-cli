@@ -291,3 +291,60 @@ func TestExcludesAreSavedAndSent(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionsTuneTheRun(t *testing.T) {
+	f := newFixture(t)
+	f.host.Repos["acme/demo"] = git.RepoNonEmpty
+	target, _ := f.kind(true, true)
+	opts := install.Options{
+		InstallerTags:  []string{"pr-1", "feat/x"},
+		UpstreamToken:  "up-tok",
+		MaxWaitSeconds: 3600,
+		Extra:          map[string]string{"KUBRIX_SYNC_DEBUG": "true"},
+		HideSecrets:    true,
+	}
+	plan, err := install.InspectWith(context.Background(), f.deps(), target, f.selection("main"), opts, f.progress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ImageFallback != "" {
+		t.Fatalf("fallback %q", plan.ImageFallback)
+	}
+	if err := plan.Run(context.Background(), f.progress, func(state.Installation) {}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.cluster.Manifest, ":feat-x") {
+		t.Errorf("the first existing candidate must be used: %q", f.cluster.Manifest)
+	}
+	if !slices.Equal(opts.InstallerTags, []string{"pr-1", "feat/x"}) {
+		t.Errorf("the candidates must not be changed: %v", opts.InstallerTags)
+	}
+	s := f.cluster.Secret
+	if s["KUBRIX_UPSTREAM_REPO_PASSWORD"] != "up-tok" || s["KUBRIX_BOOTSTRAP_MAX_WAIT_TIME"] != "3600" || s["KUBRIX_SYNC_DEBUG"] != "true" {
+		t.Errorf("secret %v", s)
+	}
+	infos := f.progress.Infos()
+	if slices.Contains(infos, "Argo CD login: admin / pw") || !slices.Contains(infos, "Argo CD login: admin / password in secret argocd/argocd-initial-admin-secret") {
+		t.Errorf("the password must stay hidden: %v", infos)
+	}
+}
+
+func TestNoInstallerTagCandidateFallsBackToLatest(t *testing.T) {
+	f := newFixture(t)
+	f.host.Repos["acme/demo"] = git.RepoNonEmpty
+	target, _ := f.kind(true, true)
+	opts := install.Options{InstallerTags: []string{"pr-1", "fix/y"}}
+	plan, err := install.InspectWith(context.Background(), f.deps(), target, f.selection("feat/x"), opts, f.progress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "No installer image " + platforminstaller.ImageRepo + ":pr-1, fix-y."; plan.ImageFallback != want {
+		t.Errorf("fallback %q, want %q", plan.ImageFallback, want)
+	}
+	if err := plan.Run(context.Background(), f.progress, func(state.Installation) {}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.cluster.Manifest, ":latest") {
+		t.Errorf("manifest %q", f.cluster.Manifest)
+	}
+}

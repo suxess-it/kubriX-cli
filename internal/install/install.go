@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/suxess-it/kubrix-cli/internal/bootstrap"
 	"github.com/suxess-it/kubrix-cli/internal/git"
@@ -80,6 +81,20 @@ type Deps struct {
 	Upstream Upstream
 }
 
+// Options tune an Install run beyond the selections; the interactive flows use the zero value.
+type Options struct {
+	// InstallerTags are the installer image tags to try in order. Without them, the tag of the kubriX version is tried.
+	InstallerTags []string
+	// UpstreamToken lets the installer clone a private kubriX source repository.
+	UpstreamToken string
+	// MaxWaitSeconds is how long the installer waits for the platform to become healthy; 0 keeps its default.
+	MaxWaitSeconds int
+	// Extra are further installer variables, passed on as they are.
+	Extra map[string]string
+	// HideSecrets keeps passwords out of the output, e.g. out of CI logs.
+	HideSecrets bool
+}
+
 // Plan is an inspected Install run.
 type Plan struct {
 	// Fresh means the platform repository has no content yet and is bootstrapped.
@@ -93,6 +108,7 @@ type Plan struct {
 	deps     Deps
 	target   Target
 	sel      state.Installation
+	opts     Options
 	repo     git.RepoState
 	manifest []byte
 	excluded []string
@@ -101,7 +117,12 @@ type Plan struct {
 // Inspect looks at what the run depends on. sel holds the selections to install; its ExcludedApps are the
 // initially deselected apps.
 func Inspect(ctx context.Context, deps Deps, target Target, sel state.Installation, p Progress) (*Plan, error) {
-	pl := &Plan{deps: deps, target: target, sel: sel}
+	return InspectWith(ctx, deps, target, sel, Options{}, p)
+}
+
+// InspectWith is Inspect for a run tuned by opts.
+func InspectWith(ctx context.Context, deps Deps, target Target, sel state.Installation, opts Options, p Progress) (*Plan, error) {
+	pl := &Plan{deps: deps, target: target, sel: sel, opts: opts}
 	if err := p.Step(ctx, "Checking repository "+sel.Org+"/"+sel.Repo, func(ctx context.Context) (err error) {
 		pl.repo, err = deps.Host.RepoState(ctx, sel.Org, sel.Repo)
 		return err
@@ -148,26 +169,35 @@ func Inspect(ctx context.Context, deps Deps, target Target, sel state.Installati
 	return pl, nil
 }
 
-// imageTag picks the installer image of the ref, or latest with ImageFallback explaining why.
+// imageTag picks the first existing installer image of Options.InstallerTags, else the one of the ref, or latest
+// with ImageFallback explaining why.
 func (pl *Plan) imageTag(ctx context.Context, p Progress) (string, error) {
 	ref := pl.sel.UpstreamBranch
-	if ref == defaultBranch {
-		return "latest", nil
+	candidates := pl.opts.InstallerTags
+	if len(candidates) == 0 {
+		if ref == defaultBranch {
+			return "latest", nil
+		}
+		candidates = []string{ref}
 	}
-	tag := platforminstaller.BranchTag(ref)
-	var exists bool
-	if err := p.Step(ctx, "Looking for installer image "+tag, func(ctx context.Context) (err error) {
-		exists, err = pl.deps.Upstream.ImageTagExists(ctx, tag)
-		return err
-	}); err != nil {
-		return "", err
+	var tags []string
+	for _, candidate := range candidates {
+		tag := platforminstaller.BranchTag(candidate)
+		tags = append(tags, tag)
+		var exists bool
+		if err := p.Step(ctx, "Looking for installer image "+tag, func(ctx context.Context) (err error) {
+			exists, err = pl.deps.Upstream.ImageTagExists(ctx, tag)
+			return err
+		}); err != nil {
+			return "", err
+		}
+		if exists {
+			p.OK("using installer image " + tag)
+			return tag, nil
+		}
 	}
-	if exists {
-		p.OK("using installer image " + tag)
-		return tag, nil
-	}
-	pl.ImageFallback = fmt.Sprintf("No installer image %s:%s.", platforminstaller.ImageRepo, tag)
-	if !version.IsRelease(ref) {
+	pl.ImageFallback = fmt.Sprintf("No installer image %s:%s.", platforminstaller.ImageRepo, strings.Join(tags, ", "))
+	if len(pl.opts.InstallerTags) == 0 && !version.IsRelease(ref) {
 		pl.ImageFallback += " Branch images are only built by running the 'create kubrix-installer image' workflow on the branch."
 	}
 	return "latest", nil
@@ -218,6 +248,9 @@ func (pl *Plan) spec(excluded []string) platforminstaller.Spec {
 		UpstreamRepo:   s.UpstreamRepo,
 		UpstreamBranch: s.UpstreamBranch,
 		Bootstrap:      pl.Fresh && !pl.cliBootstraps(),
+		UpstreamToken:  pl.opts.UpstreamToken,
+		MaxWaitSeconds: pl.opts.MaxWaitSeconds,
+		Extra:          pl.opts.Extra,
 	}
 	if pl.Fresh {
 		spec.ExcludedApps = excluded
@@ -300,7 +333,9 @@ func (pl *Plan) access(ctx context.Context, p Progress, c Cluster) error {
 		return err
 	}
 	p.Heading("Platform")
-	if pw, err := c.SecretValue(ctx, "argocd", "argocd-initial-admin-secret", "password"); err == nil {
+	if pl.opts.HideSecrets {
+		p.Info("Argo CD login: admin / password in secret argocd/argocd-initial-admin-secret")
+	} else if pw, err := c.SecretValue(ctx, "argocd", "argocd-initial-admin-secret", "password"); err == nil {
 		p.Info("Argo CD login: admin / " + pw)
 	}
 	hosts, err := c.IngressHosts(ctx)

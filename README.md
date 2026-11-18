@@ -3,7 +3,7 @@
 `kubrix` sets up and maintains kubriX platforms in one interactive run:
 
 - `kubrix demo`: a demo platform on a local [kind](https://kind.sigs.k8s.io/) cluster, and `kubrix demo delete` to remove it again.
-- `kubrix install` (experimental): kubriX on an existing cluster (one of your kubeconfig contexts).
+- `kubrix install -i` (experimental): kubriX on an existing cluster (one of your kubeconfig contexts). Without `-i`, `kubrix install` runs [without questions](#non-interactive-kubrix-install), for example in CI.
 - `kubrix upgrade` (experimental): upgrades an installation to a newer kubriX release by opening a pull request in its repository.
 
 `install` and `upgrade` are experimental: they are hidden, and refuse to run, unless you set `KUBRIX_EXPERIMENTAL=1`. The menu and `demo delete` then show installations on existing clusters as well; without it they only know demos.
@@ -37,7 +37,7 @@ You don't need `kind`, `kubectl`, `helm`, `curl`, `skopeo` or `gomplate`. The to
 cd cli
 go run .                   # menu: demo, install, upgrade, delete, help
 go run . demo              # or: go build -o kubrix . && ./kubrix demo
-go run . install
+go run . install -i
 go run . upgrade
 ```
 
@@ -85,7 +85,7 @@ Releases older than v7.0.0 are not offered. Their installer rendered templates d
 7. Writes `kubrix-install-secrets`, applies `install-manifests.yaml` from the chosen version, and streams the installer job's logs until it finishes.
 8. Prints the Argo CD login and the platform URLs (`https://<app>.127-0-0-1.nip.io`).
 
-## What `kubrix install` does
+## What `kubrix install -i` does
 
 1. Asks for the kubeconfig context (default: the current one) and checks it:
    - the cluster is reachable;
@@ -106,6 +106,42 @@ Releases older than v7.0.0 are not offered. Their installer rendered templates d
 6. Creates and bootstraps the repository, creates the DNS Secret, runs the installer and streams its logs, and prints the Argo CD login and the platform URLs.
 
 Size, HA and security-strict options are not offered: in OSS kubriX the values files they select don't exist.
+
+## Non-interactive `kubrix install`
+
+Without `-i`, `kubrix install` asks nothing. It runs the same install, with the answers taken from flags, `KUBRIX_*` environment variables and a YAML `--config` file, in that order of precedence. Every flag is also an environment variable and a config file key: `--upstream-branch` is `KUBRIX_UPSTREAM_BRANCH` and `upstream-branch:`. `kubrix install --help` lists them all.
+
+```yaml
+# kubrix.yaml
+context: prod
+repo: acme/kubrix-platform
+upstream-branch: v8.0.0
+domain: platform.example.com
+dns-provider: cloudflare
+app-exclude: [kargo]
+extra-env:
+  KUBRIX_SYNC_DEBUG: true
+```
+
+```bash
+KUBRIX_EXPERIMENTAL=1 KUBRIX_DNS_TOKEN=... kubrix install --config kubrix.yaml
+```
+
+- `context` and `repo` are required. `repo` and `upstream-repo` take `owner/repo` or a GitHub URL. Existing clusters also need `domain` and `dns-provider` (`none` for a manual wildcard record).
+- A `kind-<name>` context reuses the existing kind cluster `<name>`, for example one created by `kind create cluster` in CI. The domain is `127-0-0-1.nip.io` and there is no DNS provider.
+- Secrets are only read from the environment, never from flags or the config file:
+  - `KUBRIX_REPO_PASSWORD`: the GitHub token, else `GITHUB_TOKEN`, `GH_TOKEN` or the `gh` CLI's. Without `git-user-name`, the token's login is used. A GitHub App token has no login, so set `git-user-name` with it.
+  - `KUBRIX_UPSTREAM_REPO_PASSWORD`: reads a private kubriX source repository, and is passed on to the installer.
+  - `KUBRIX_DNS_TOKEN`: the Cloudflare, IONOS or STACKIT token.
+- Every other non-empty `KUBRIX_*` variable, and the config file's `extra-env` map, is passed on to the installer unchanged, e.g. `KUBRIX_SYNC_DEBUG`. Variables the CLI decides itself, such as `KUBRIX_BOOTSTRAP`, are rejected.
+- `installer-tag` lists installer image tags to try in order, e.g. `pr-123,main`; the first that exists is used, else `latest`. Without it, the image of the kubriX version is tried, as in the interactive install.
+- `bootstrap-max-wait-time` is passed on as `KUBRIX_BOOTSTRAP_MAX_WAIT_TIME`, and the CLI waits for the installer for that long plus 10 minutes.
+- Where the interactive install asks, the non-interactive one decides:
+  - a repository with content is reinstalled from;
+  - a missing installer image falls back to `latest` with a warning;
+  - exclusions that don't apply are reported;
+  - a cluster without a default StorageClass is refused.
+- The Argo CD password is not printed, so it stays out of CI logs; read it from the `argocd-initial-admin-secret` Secret.
 
 ## What `kubrix upgrade` does
 

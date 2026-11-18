@@ -28,19 +28,59 @@ const (
 
 var domainRe = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)+[a-z]{2,}$`)
 
+const installLong = `Install kubriX on the cluster of a kubeconfig context.
+
+Without -i the install runs without questions. Its settings come from flags, from KUBRIX_* environment
+variables (--upstream-branch is KUBRIX_UPSTREAM_BRANCH) and from a YAML --config file, in that order of
+precedence. A kind-<name> context reuses the kind cluster <name>, like 'kubrix demo'.
+
+Secrets are only read from the environment:
+  KUBRIX_REPO_PASSWORD           GitHub token (else GITHUB_TOKEN, GH_TOKEN or the gh CLI's)
+  KUBRIX_UPSTREAM_REPO_PASSWORD  token for a private kubriX source repository
+  KUBRIX_DNS_TOKEN               API token of cloudflare, ionos or stackit
+
+Every other KUBRIX_* variable, and the config file's extra-env map, is passed on to the platform installer.
+
+With -i the installer asks for the settings instead.`
+
 func newInstallCmd(f Features) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:    "install",
 		Short:  "Install kubriX on an existing cluster (a kubeconfig context) (experimental)",
+		Long:   installLong,
 		Args:   cobra.NoArgs,
 		Hidden: !f.Experimental,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.requireExperimental("install"); err != nil {
 				return err
 			}
-			return withUI(cmd, "install", func(ctx context.Context, u ui.UI) error { return runInstall(ctx, u, productionServices(f)) })
+			if interactive, _ := cmd.Flags().GetBool("interactive"); interactive {
+				for _, name := range append([]string{"config"}, installFlagNames()...) {
+					if cmd.Flags().Changed(name) {
+						return fmt.Errorf("--%s cannot be combined with --interactive, which asks for the settings", name)
+					}
+				}
+				return withUI(cmd, "install", func(ctx context.Context, u ui.UI) error { return runInstall(ctx, u, productionServices(f)) })
+			}
+			configFile, _ := cmd.Flags().GetString("config")
+			cfg, err := loadInstallConfig(cmd.Flags(), configFile)
+			if err != nil {
+				return err
+			}
+			return runInstallFromConfig(cmd.Context(), noPrompts{ui.NewPlain(cmd.OutOrStdout())}, productionServices(f), cfg)
 		},
 	}
+	cmd.Flags().BoolP("interactive", "i", false, "ask for the settings")
+	cmd.Flags().String("config", "", "YAML file with the settings; flags and KUBRIX_* variables take precedence")
+	addInstallFlags(cmd.Flags())
+	return cmd
+}
+
+// noPrompts is the UI of a non-interactive install, which never asks.
+type noPrompts struct{ ui.UI }
+
+func (noPrompts) Ask(ui.Form) error {
+	return errors.New("kubrix install does not ask without --interactive; this is a bug")
 }
 
 func expandHome(path string) string {
@@ -130,7 +170,24 @@ func pickContext(u ui.UI, listContexts func() ([]kubeconfig.Context, string, err
 	return contexts[i], nil
 }
 
+const noStorageClassMsg = "The cluster has no default StorageClass. Grafana, Mimir, MinIO and the Postgres databases need persistent volumes."
+
 func preflight(ctx context.Context, u ui.UI, kc clusterAccess, kctx kubeconfig.Context) error {
+	storage, err := checkCluster(ctx, u, kc, kctx)
+	if err != nil {
+		return err
+	}
+	if !storage {
+		u.Warn(noStorageClassMsg)
+		if ok, err := ui.Confirm(u, "Continue without a default StorageClass?", noStorageClassMsg, false); err != nil || !ok {
+			return abortErr(err)
+		}
+	}
+	return nil
+}
+
+// checkCluster requires cluster-admin rights and reports whether the cluster has a default StorageClass.
+func checkCluster(ctx context.Context, u ui.UI, kc clusterAccess, kctx kubeconfig.Context) (bool, error) {
 	var admin, storage bool
 	if err := u.Step(ctx, "Checking cluster "+kctx.Name, func(ctx context.Context) (err error) {
 		if admin, err = kc.IsClusterAdmin(ctx); err != nil {
@@ -139,19 +196,12 @@ func preflight(ctx context.Context, u ui.UI, kc clusterAccess, kctx kubeconfig.C
 		storage, err = kc.HasDefaultStorageClass(ctx)
 		return err
 	}); err != nil {
-		return err
+		return false, err
 	}
 	if !admin {
-		return errors.New("your kubeconfig user is not cluster-admin; the kubriX installer needs cluster-admin rights")
+		return false, errors.New("your kubeconfig user is not cluster-admin; the kubriX installer needs cluster-admin rights")
 	}
-	if !storage {
-		msg := "The cluster has no default StorageClass. Grafana, Mimir, MinIO and the Postgres databases need persistent volumes."
-		u.Warn(msg)
-		if ok, err := ui.Confirm(u, "Continue without a default StorageClass?", msg, false); err != nil || !ok {
-			return abortErr(err)
-		}
-	}
-	return nil
+	return storage, nil
 }
 
 func confirmContext(u ui.UI, kctx kubeconfig.Context) error {
@@ -215,8 +265,8 @@ func collectInstallInput(ctx context.Context, u ui.UI, gh githubAPI, login strin
 	vc := newVersionChoice(releases, contributor, current, false)
 	versionSelect, otherBranchPage := vc.fields("Installs on existing clusters default to the latest release.")
 
-	usesToken := func() bool { return slices.Contains([]string{"cloudflare", "ionos", "stackit"}, dnsChoice) }
-	usesFile := func() bool { return dnsChoice == "aws" || dnsChoice == "azure" }
+	usesToken := func() bool { return dnsUsesToken(dnsChoice) }
+	usesFile := func() bool { return dnsUsesFile(dnsChoice) }
 	fileHint := map[string]string{
 		"aws":   "Path to an AWS shared-credentials file (e.g. ~/.aws/credentials) for Route 53; see aws-resources/route53-iam-policy.json.",
 		"azure": "Path to the azure.json external-dns uses for Azure DNS.",
@@ -271,4 +321,175 @@ func collectInstallInput(ctx context.Context, u ui.UI, gh githubAPI, login strin
 	}
 	creds.File = expandHome(creds.File)
 	return *in, creds, contributor, nil
+}
+
+// dnsProviders are the DNS providers of an existing cluster; install.DNSManual means no provider.
+var dnsProviders = []string{"cloudflare", "ionos", "stackit", "aws", "azure", install.DNSManual}
+
+func dnsUsesToken(provider string) bool {
+	return slices.Contains([]string{"cloudflare", "ionos", "stackit"}, provider)
+}
+
+func dnsUsesFile(provider string) bool { return provider == "aws" || provider == "azure" }
+
+// checkDNSCredentials asks of a non-interactive install what the interactive one asks for the provider.
+func checkDNSCredentials(provider string, creds install.DNSCredentials) error {
+	switch {
+	case dnsUsesToken(provider) && creds.Token == "":
+		return fmt.Errorf("%s needs an API token: set %s", provider, dnsTokenEnv)
+	case provider == "stackit" && creds.ProjectID == "":
+		return errors.New("stackit needs dns-project-id")
+	case dnsUsesFile(provider) && creds.File == "":
+		return fmt.Errorf("%s needs dns-credentials-file", provider)
+	case dnsUsesFile(provider):
+		if _, err := os.Stat(creds.File); err != nil {
+			return fmt.Errorf("dns-credentials-file: %w", err)
+		}
+	}
+	return nil
+}
+
+// runInstallFromConfig is the non-interactive install: cfg answers every question the interactive one asks.
+func runInstallFromConfig(ctx context.Context, u ui.UI, svc services, cfg installConfig) error {
+	u.Heading("Install kubriX into context " + cfg.Context)
+
+	contexts, _, err := svc.contexts()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(contexts, func(c kubeconfig.Context) bool { return c.Name == cfg.Context })
+	if i < 0 {
+		return fmt.Errorf("no kubeconfig context %q", cfg.Context)
+	}
+	sel := state.Installation{
+		GitHost: git.GitHubName, Org: cfg.Org, Repo: cfg.Repo, GitUserName: cfg.GitUserName, TargetType: cfg.TargetType,
+		UpstreamRepo: cfg.UpstreamRepo, UpstreamBranch: cfg.UpstreamBranch, ExcludedApps: cfg.ExcludedApps,
+	}
+	target, err := configTarget(ctx, u, svc, cfg, contexts[i], &sel)
+	if err != nil {
+		return err
+	}
+
+	gh, err := svc.githubToken(cfg.RepoToken)
+	if err != nil {
+		return err
+	}
+	if sel.GitUserName == "" {
+		if err := u.Step(ctx, "Checking GitHub token", func(ctx context.Context) (err error) {
+			sel.GitUserName, err = gh.Validate(ctx)
+			return err
+		}); err != nil {
+			return fmt.Errorf("%w (with a token that has no user, set %s)", err, envName("git-user-name"))
+		}
+	}
+
+	catalog := openCatalog(u)
+	deps := install.Deps{Host: gh, Upstream: svc.upstream(cmp.Or(cfg.UpstreamToken, gh.Token()))}
+	opts := install.Options{
+		InstallerTags:  cfg.InstallerTags,
+		UpstreamToken:  cfg.UpstreamToken,
+		MaxWaitSeconds: cfg.MaxWaitSeconds,
+		Extra:          cfg.Extra,
+		HideSecrets:    true,
+	}
+	plan, err := install.InspectWith(ctx, deps, target, sel, opts, u)
+	if err != nil {
+		return err
+	}
+	if !plan.Fresh {
+		u.Info(fmt.Sprintf("%s/%s already has content: installing from it without bootstrapping", sel.Org, sel.Repo))
+	}
+	warnIgnoredExcludes(u, plan, sel)
+	if plan.ImageFallback != "" {
+		u.Warn(plan.ImageFallback + " Using the 'latest' installer image.")
+	}
+	return plan.Run(ctx, u, recordInstallation(u, catalog))
+}
+
+// configTarget is the target of the context: a kind cluster that is reused, or an existing cluster. It completes
+// sel with what the target decides.
+func configTarget(ctx context.Context, u ui.UI, svc services, cfg installConfig, kctx kubeconfig.Context, sel *state.Installation) (install.Target, error) {
+	clusterType := "k8s"
+	if kctx.IsKind() {
+		clusterType = "kind"
+	}
+	if cfg.ClusterType != "" && cfg.ClusterType != clusterType {
+		return nil, fmt.Errorf("%s is %s, but context %s is a %s cluster", clusterTypeEnv, cfg.ClusterType, kctx.Name, clusterType)
+	}
+
+	if kctx.IsKind() {
+		switch {
+		case cfg.Domain != "" && cfg.Domain != kindDomain:
+			return nil, fmt.Errorf("domain on kind is %s", kindDomain)
+		case cfg.DNSProvider != "" && cfg.DNSProvider != install.DNSManual:
+			return nil, fmt.Errorf("dns-provider on kind is %s", install.DNSManual)
+		case cfg.CloudProvider != "":
+			return nil, errors.New("cloud-provider does not apply to kind")
+		}
+		name := strings.TrimPrefix(kctx.Name, "kind-")
+		exists, err := svc.kind.Exists(name)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, fmt.Errorf("context %s has no kind cluster %q", kctx.Name, name)
+		}
+		caDir, err := state.Dir()
+		if err != nil {
+			return nil, err
+		}
+		sel.Kind, sel.ClusterName, sel.Domain, sel.DNSProvider = state.KindDemo, name, kindDomain, install.DNSManual
+		return &install.KindTarget{Clusters: svc.kind, Name: name, Reuse: true, CADir: caDir}, nil
+	}
+
+	if cfg.Domain == "" {
+		return nil, fmt.Errorf("domain is required on existing clusters: set --domain or %s", envName("domain"))
+	}
+	if err := validDomain(cfg.Domain); err != nil {
+		return nil, fmt.Errorf("domain: %w", err)
+	}
+	if !slices.Contains(dnsProviders, cfg.DNSProvider) {
+		return nil, fmt.Errorf("dns-provider must be one of %s", strings.Join(dnsProviders, ", "))
+	}
+	if err := checkDNSCredentials(cfg.DNSProvider, cfg.DNS); err != nil {
+		return nil, err
+	}
+	cloud := cmp.Or(cfg.CloudProvider, defaultProvider)
+	if cloud != defaultProvider && cloud != "aks" {
+		return nil, fmt.Errorf("cloud-provider must be %s or aks", defaultProvider)
+	}
+	kc, err := svc.cluster(kctx.Name)
+	if err != nil {
+		return nil, err
+	}
+	storage, err := checkCluster(ctx, u, kc, kctx)
+	if err != nil {
+		return nil, err
+	}
+	if !storage {
+		return nil, errors.New("the cluster has no default StorageClass, which Grafana, Mimir, MinIO and the Postgres databases need; use --interactive to install anyway")
+	}
+	sel.Kind, sel.Context, sel.Domain, sel.DNSProvider, sel.CloudProvider = state.Cluster, kctx.Name, cfg.Domain, cfg.DNSProvider, cloud
+	return &install.ClusterTarget{Kube: kc, Domain: cfg.Domain, DNSProvider: cfg.DNSProvider, DNS: cfg.DNS}, nil
+}
+
+// warnIgnoredExcludes reports the requested exclusions the plan does not apply; the interactive install shows them.
+func warnIgnoredExcludes(u ui.UI, plan *install.Plan, sel state.Installation) {
+	if len(sel.ExcludedApps) == 0 {
+		return
+	}
+	if !plan.Fresh {
+		u.Warn("app-exclude has no effect: " + sel.Org + "/" + sel.Repo + " is already bootstrapped")
+		return
+	}
+	for _, app := range sel.ExcludedApps {
+		if slices.Contains(plan.Excluded(), app) {
+			continue
+		}
+		reason := "it is not an optional application of " + sel.TargetType
+		if plan.Apps != nil && slices.Contains(plan.Apps.Optional, app) {
+			reason = "an installed application needs it"
+		}
+		u.Warn("app-exclude " + app + " has no effect: " + reason)
+	}
 }

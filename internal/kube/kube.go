@@ -275,6 +275,14 @@ func (c *Client) JobDiagnostics(ctx context.Context, ns, name string) string {
 				fmt.Fprintf(&b, "  container %s terminated: exitCode=%d reason=%s\n", cs.Name, t.ExitCode, t.Reason)
 			}
 		}
+		events, err := c.cs.CoreV1().Events(ns).List(ctx, metav1.ListOptions{FieldSelector: "involvedObject.name=" + pod.Name})
+		if err == nil {
+			for _, e := range events.Items {
+				if e.InvolvedObject.Name == pod.Name {
+					fmt.Fprintf(&b, "  event %s %s: %s\n", e.Type, e.Reason, e.Message)
+				}
+			}
+		}
 	}
 	return b.String()
 }

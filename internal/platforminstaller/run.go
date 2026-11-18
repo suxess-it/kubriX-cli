@@ -1,10 +1,12 @@
 package platforminstaller
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ const (
 	// DefaultUpstream is the kubriX source repository; the installer only needs to be told about other ones.
 	DefaultUpstream = "suxess-it/kubriX"
 
+	// maxWaitSec is install-platform.sh's default KUBRIX_BOOTSTRAP_MAX_WAIT_TIME.
 	maxWaitSec = 2400
 	// install-kubriX-with-job.sh adds the same slack on top of KUBRIX_BOOTSTRAP_MAX_WAIT_TIME.
 	slackSec = 600
@@ -58,7 +61,24 @@ type Spec struct {
 	Bootstrap bool
 	// ExcludedApps are applications left out while bootstrapping; only meaningful for a fresh repository.
 	ExcludedApps []string
+	// UpstreamToken lets the installer clone a private UpstreamRepo.
+	UpstreamToken string
+	// MaxWaitSeconds is how long the installer waits for the platform to become healthy; 0 keeps its default.
+	MaxWaitSeconds int
+	// Extra are further installer variables, passed on as they are. They never replace a specKey.
+	Extra map[string]string
 }
+
+// specKeys are the Secret keys SecretValues derives from the Spec's fields.
+var specKeys = []string{
+	"KUBRIX_REPO", "KUBRIX_REPO_PASSWORD", "KUBRIX_GIT_USER_NAME", "KUBRIX_DOMAIN", "KUBRIX_DNS_PROVIDER",
+	"KUBRIX_TARGET_TYPE", "KUBRIX_CLUSTER_TYPE", "KUBRIX_BOOTSTRAP", "KUBRIX_INSTALLER", "KUBRIX_UPSTREAM_BRANCH",
+	"KUBRIX_CLOUD_PROVIDER", "KUBRIX_APP_EXCLUDE", "KUBRIX_UPSTREAM_REPO", "KUBRIX_UPSTREAM_REPO_PASSWORD",
+	"KUBRIX_BOOTSTRAP_MAX_WAIT_TIME",
+}
+
+// IsSpecKey reports whether the Secret key is derived from a Spec field, so it cannot be one of the Extra.
+func IsSpecKey(key string) bool { return slices.Contains(specKeys, key) }
 
 // SecretValues are the keys of the installer's Secret, the env contract with install-platform.sh.
 func (s Spec) SecretValues() map[string]string {
@@ -82,6 +102,17 @@ func (s Spec) SecretValues() map[string]string {
 	}
 	if s.UpstreamRepo != DefaultUpstream {
 		v["KUBRIX_UPSTREAM_REPO"] = "https://github.com/" + s.UpstreamRepo
+	}
+	if s.UpstreamToken != "" {
+		v["KUBRIX_UPSTREAM_REPO_PASSWORD"] = s.UpstreamToken
+	}
+	if s.MaxWaitSeconds > 0 {
+		v["KUBRIX_BOOTSTRAP_MAX_WAIT_TIME"] = strconv.Itoa(s.MaxWaitSeconds)
+	}
+	for key, value := range s.Extra {
+		if !IsSpecKey(key) {
+			v[key] = value
+		}
 	}
 	return v
 }
@@ -113,7 +144,7 @@ func Run(ctx context.Context, kc Kube, p Progress, o Options) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, (maxWaitSec+slackSec)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(cmp.Or(o.Spec.MaxWaitSeconds, maxWaitSec)+slackSec)*time.Second)
 	defer cancel()
 
 	var pod string

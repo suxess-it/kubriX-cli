@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeKube struct {
@@ -17,6 +18,7 @@ type fakeKube struct {
 	succeeded bool
 	waitErr   error
 	logs      string
+	wait      time.Duration // how long WaitForJob was allowed to wait
 }
 
 func (f *fakeKube) EnsureNamespace(_ context.Context, name string) error {
@@ -50,7 +52,10 @@ func (f *fakeKube) StreamLogs(_ context.Context, _, _ string, w io.Writer) error
 	return err
 }
 
-func (f *fakeKube) WaitForJob(context.Context, string, string) (bool, error) {
+func (f *fakeKube) WaitForJob(ctx context.Context, _, _ string) (bool, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		f.wait = time.Until(deadline)
+	}
 	return f.succeeded, f.waitErr
 }
 
@@ -96,6 +101,41 @@ func TestKindBranchSecretUnchanged(t *testing.T) {
 	}
 	if !maps.Equal(got, want) {
 		t.Fatalf("got %v\nwant %v", got, want)
+	}
+}
+
+func TestSecretValuesOptionalFieldsAndExtra(t *testing.T) {
+	s := kindSpec("main", true)
+	s.UpstreamToken, s.MaxWaitSeconds = "up-tok", 3600
+	s.Extra = map[string]string{"KUBRIX_SYNC_DEBUG": "true", "KUBRIX_DOMAIN": "ignored.example.com"}
+	got := s.SecretValues()
+	if got["KUBRIX_UPSTREAM_REPO_PASSWORD"] != "up-tok" || got["KUBRIX_BOOTSTRAP_MAX_WAIT_TIME"] != "3600" || got["KUBRIX_SYNC_DEBUG"] != "true" {
+		t.Errorf("got %v", got)
+	}
+	if got["KUBRIX_DOMAIN"] != "127-0-0-1.nip.io" {
+		t.Errorf("an extra variable must not replace a spec key: %v", got)
+	}
+	for key := range got {
+		if !IsSpecKey(key) && key != "KUBRIX_SYNC_DEBUG" {
+			t.Errorf("%s is written but not a spec key", key)
+		}
+	}
+}
+
+func TestRunWaitsForTheConfiguredTime(t *testing.T) {
+	for _, tc := range []struct {
+		maxWait int
+		want    time.Duration
+	}{{0, (maxWaitSec + slackSec) * time.Second}, {100, (100 + slackSec) * time.Second}} {
+		kc := &fakeKube{succeeded: true}
+		s := kindSpec("main", true)
+		s.MaxWaitSeconds = tc.maxWait
+		if err := Run(context.Background(), kc, &fakeProgress{}, Options{Spec: s}); err != nil {
+			t.Fatal(err)
+		}
+		if kc.wait > tc.want || kc.wait < tc.want-time.Minute {
+			t.Errorf("max wait %d: waited up to %v, want %v", tc.maxWait, kc.wait, tc.want)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/suxess-it/kubrix-cli/internal/git"
 	"github.com/suxess-it/kubrix-cli/internal/install"
@@ -24,8 +25,10 @@ type clusterAccess interface {
 type services struct {
 	// github connects to GitHub, asking for a token when the gh CLI has none, and returns the login.
 	github func(ctx context.Context, u ui.UI) (githubAPI, string, error)
-	// upstream reads the kubriX source repository and the installer image on behalf of the host's token.
-	upstream func(host git.Host) install.Upstream
+	// githubToken connects to GitHub with a token, without asking; an empty token means the gh CLI's.
+	githubToken func(token string) (githubAPI, error)
+	// upstream reads the kubriX source repository and the installer image on behalf of the token.
+	upstream func(token string) install.Upstream
 	// upstreamGitURL is the clone URL of a kubriX source repository (owner/repo); GitHub's when nil.
 	upstreamGitURL func(repo string) string
 	// kind creates and reaches the demo clusters.
@@ -51,7 +54,16 @@ func productionServices(f Features) services {
 			}
 			return gh, login, nil
 		},
-		upstream: func(host git.Host) install.Upstream { return platforminstaller.Source{Token: host.Token()} },
+		githubToken: func(token string) (githubAPI, error) {
+			if token == "" {
+				var err error
+				if token, err = git.GitHubTokenFromCLI(); err != nil {
+					return nil, fmt.Errorf("no GitHub token: set %s (or GITHUB_TOKEN), or log in with gh: %w", repoTokenEnv, err)
+				}
+			}
+			return git.NewGitHub(token)
+		},
+		upstream: func(token string) install.Upstream { return platforminstaller.Source{Token: token} },
 		kind:     install.NewKindClusters(),
 		docker:   kindcluster.DockerResources,
 		contexts: kubeconfig.Contexts,
@@ -67,5 +79,5 @@ func productionServices(f Features) services {
 
 // installDeps are the services an Install run talks to.
 func (s services) installDeps(host git.Host) install.Deps {
-	return install.Deps{Host: host, Upstream: s.upstream(host)}
+	return install.Deps{Host: host, Upstream: s.upstream(host.Token())}
 }
