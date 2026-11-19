@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/suxess-it/kubriX-cli/compare/v0.1.3...v0.1.4) (2026-11-19)
+
+
+### Bug Fixes
+
+* strip .git in KUBRIX_REPO ([fba2441](https://github.com/suxess-it/kubriX-cli/commit/fba244113a86fcce8dc78cb198726a6815b8862b))
+* strip .git in KUBRIX_REPO ([4d83cd2](https://github.com/suxess-it/kubriX-cli/commit/4d83cd28d1bf57924e2dd3cb470bf9baec2fe195))
+
 ## [0.1.3](https://github.com/suxess-it/kubriX-cli/compare/v0.1.2...v0.1.3) (2026-11-18)
 
 
