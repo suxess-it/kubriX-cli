@@ -234,10 +234,14 @@ func (pl *Plan) finalExcludes(p Progress) []string {
 
 func (pl *Plan) repoURL() string { return pl.deps.Host.CloneURL(pl.sel.Org, pl.sel.Repo) }
 
+// webURL is the repository URL without ".git", passed to the installer as KUBRIX_REPO and gitRepo,
+// as the installer did before the CLI; Backstage can't read catalog files from ".git/blob/..." URLs.
+func (pl *Plan) webURL() string { return strings.TrimSuffix(pl.repoURL(), ".git") }
+
 func (pl *Plan) spec(excluded []string) platforminstaller.Spec {
 	s := pl.sel
 	spec := platforminstaller.Spec{
-		RepoURL:        pl.repoURL(),
+		RepoURL:        pl.webURL(),
 		RepoToken:      pl.deps.Host.Token(),
 		GitUserName:    s.GitUserName,
 		Domain:         s.Domain,
@@ -319,7 +323,7 @@ func (pl *Plan) prepareRepo(ctx context.Context, p Progress, excluded []string) 
 				CloudProvider: s.CloudProvider,
 				DNSProvider:   s.DNSProvider,
 				Domain:        s.Domain,
-				Repo:          pl.repoURL(),
+				Repo:          pl.webURL(),
 				GitUser:       s.GitUserName,
 			},
 			TargetType: s.TargetType,
