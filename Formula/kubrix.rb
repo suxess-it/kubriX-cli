@@ -5,20 +5,20 @@
 class Kubrix < Formula
   desc ""
   homepage "https://kubrix.io"
-  version "0.1.4"
+  version "0.1.5"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.4/kubriX-cli_Darwin_x86_64.tar.gz"
-      sha256 "08563720bd4c17cacc19ed842c5ff5282ff2aead099c8a9f921ea09551c9e9d9"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.5/kubriX-cli_Darwin_x86_64.tar.gz"
+      sha256 "b1c2b192058ff35b3af0776ea6318f2301c3e8b993ce6dd0ab88b54ba2309a76"
 
       define_method(:install) do
         bin.install "kubrix"
       end
     end
     if Hardware::CPU.arm?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.4/kubriX-cli_Darwin_arm64.tar.gz"
-      sha256 "e7609fdbb1637756186d7681a51b1140912be4ee88670e6be6b69897c47ba64e"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.5/kubriX-cli_Darwin_arm64.tar.gz"
+      sha256 "e79629316a19f12fd779e65d5ec953cc7d2da21c4161eccdb05aa76bf40cfdda"
 
       define_method(:install) do
         bin.install "kubrix"
@@ -28,15 +28,15 @@ class Kubrix < Formula
 
   on_linux do
     if Hardware::CPU.intel? && Hardware::CPU.is_64_bit?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.4/kubriX-cli_Linux_x86_64.tar.gz"
-      sha256 "a7b6f22019f8b7017a0865ed267abfa3fd3dc82a6ea48335b5b1bb7d13b16a81"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.5/kubriX-cli_Linux_x86_64.tar.gz"
+      sha256 "542b31079588ac3cde0759fa7a9fd61639e747cda2b1f87623801d5c4914912d"
       define_method(:install) do
         bin.install "kubrix"
       end
     end
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.4/kubriX-cli_Linux_arm64.tar.gz"
-      sha256 "8943cd381fd29d174f4893836a220bdff04eb1432c0cd674b40864837ff97ce1"
+      url "https://github.com/suxess-it/kubriX-cli/releases/download/v0.1.5/kubriX-cli_Linux_arm64.tar.gz"
+      sha256 "be8a74b01e9abcf4635f9c93c70ef309acbc1ca2c5dd6bc62b605b17577b165d"
       define_method(:install) do
         bin.install "kubrix"
       end
