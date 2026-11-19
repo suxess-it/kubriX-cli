@@ -12,7 +12,7 @@ require (
 	github.com/aymanbagabas/go-udiff v0.4.2
 	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/google/go-containerregistry v0.22.1
-	github.com/google/go-github/v92 v92.0.0
+	github.com/google/go-github/v93 v93.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.1.0
 	github.com/spf13/viper v1.21.0

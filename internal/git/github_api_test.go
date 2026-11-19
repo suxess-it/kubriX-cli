@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	gh "github.com/google/go-github/v92/github"
+	gh "github.com/google/go-github/v93/github"
 )
 
 // newTestGitHub returns a GitHub adapter that talks to handler instead of api.github.com.

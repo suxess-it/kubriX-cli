@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	gh "github.com/google/go-github/v92/github"
+	gh "github.com/google/go-github/v93/github"
 
 	"github.com/suxess-it/kubrix-cli/internal/version"
 )
@@ -136,8 +136,8 @@ func (c *GitHub) RepoState(ctx context.Context, org, name string) (RepoState, er
 }
 
 func (c *GitHub) CreatePrivateRepo(ctx context.Context, org, name string) error {
-	_, _, err := c.c.Repositories.Create(ctx, org, &gh.Repository{
-		Name:        new(name),
+	_, _, err := c.c.Repositories.Create(ctx, org, gh.CreateRepositoryRequest{
+		Name:        name,
 		Private:     new(true),
 		Description: new("kubriX demo platform repository (created by kubrix demo)"),
 	})
