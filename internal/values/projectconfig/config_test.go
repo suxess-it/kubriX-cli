@@ -28,7 +28,7 @@ func load(t *testing.T, dir, config string) *Config {
 	return c
 }
 
-func TestOverlayResolvesFilesRelativeToTheConfigAndSkipsMissingOptionalOnes(t *testing.T) {
+func TestOverlayResolvesFilesRelativeToTheConfigNamesThemSoAndSkipsMissingOptionalOnes(t *testing.T) {
 	d := t.TempDir()
 	put(t, filepath.Join(d, "conf", "b", "one.yaml"), "x: 1\n")
 	put(t, filepath.Join(d, "abs.yaml"), "y: 1\n")
@@ -40,7 +40,8 @@ func TestOverlayResolvesFilesRelativeToTheConfigAndSkipsMissingOptionalOnes(t *t
 	if o.TargetType != "dev" || len(o.Apps) != 2 || o.Apps[0].Name != "app" || o.Apps[1].Chart != "zeta" {
 		t.Fatalf("overlay = %+v, want apps sorted and chart defaulting to the name", o)
 	}
-	want := []string{filepath.Join(d, "conf", "b", "one.yaml"), filepath.Join(d, "abs.yaml")}
+	// Files below the config are named as the config names them; others keep their absolute path.
+	want := []string{"b/one.yaml", filepath.Join(d, "abs.yaml")}
 	if got := o.Apps[0].LayerNames(); o.Apps[0].Chart != "other" || !reflect.DeepEqual(got, want) {
 		t.Fatalf("app = %s %v, want other %v", o.Apps[0].Chart, got, want)
 	}

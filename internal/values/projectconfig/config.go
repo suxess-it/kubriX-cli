@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/suxess-it/kubrix-cli/internal/values/engine"
 	"github.com/suxess-it/kubrix-cli/internal/values/overlay"
@@ -72,6 +73,16 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
+// displayName names a file in sources as the config does: relative to the config file when it lies below it, so
+// output is the same on every machine.
+func (c *Config) displayName(p string) string {
+	rel, err := filepath.Rel(c.baseDir, p)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return p
+	}
+	return filepath.ToSlash(rel)
+}
+
 // Overlay resolves every application of a target type. Missing optional files are skipped; a missing required file,
 // an empty file list or an application without any existing file is an error.
 func (c *Config) Overlay(targetType string) (*overlay.Overlay, error) {
@@ -123,7 +134,7 @@ func (c *Config) resolve(name string, a Application) (overlay.App, []string, err
 		if err != nil {
 			return overlay.App{}, nil, fmt.Errorf("values file %q: %w", p, err)
 		}
-		app.Layers = append(app.Layers, engine.Layer{Name: p, Data: data})
+		app.Layers = append(app.Layers, engine.Layer{Name: c.displayName(p), Data: data})
 	}
 	if len(app.Layers) == 0 {
 		return overlay.App{}, nil, fmt.Errorf("application %q has no existing values files", name)

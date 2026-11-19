@@ -177,8 +177,19 @@ kubrix values search ingress.enabled --repo . --target-type kind            # ac
 
 `--file` and `--set` merge files and expressions given on the command line instead. A `.kubrix-values.yaml` in
 `--repo` (or `--values-config FILE`) lists the files per target type by hand, for repositories without a kubriX
-target chart; see `examples/values/`. `--format json` prints the output for scripts; `apps --format json` lists each
-application's values files and parameters in merge order.
+target chart. `--format json` prints the output for scripts; `apps --format json` lists each application's values
+files and parameters in merge order.
+
+To try it without a platform repository, run the commands in `examples/values/`:
+
+```bash
+cd examples/values
+kubrix values explain --target-type kind-hub-prime --app mimir mimir.distributor.replicas
+kubrix values lint    --target-type kind-hub-prime --app mimir
+```
+
+[docs/values.md](docs/values.md) describes where the values files come from, the `.kubrix-values.yaml` format, the
+merge and provenance model and the lint rules.
 
 ## Reviewing a change with `kubrix diff`
 
