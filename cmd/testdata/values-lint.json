@@ -1,0 +1,19 @@
+[
+  {
+    "rule": "identical-redefinition",
+    "severity": "info",
+    "application": "grafana",
+    "path": "grafana.ingress.enabled",
+    "message": "later assignment repeats the already effective value",
+    "source": {
+      "file": "platform-apps/charts/grafana/values-size-small.yaml",
+      "line": 4,
+      "column": 14
+    },
+    "previous": {
+      "file": "platform-apps/charts/grafana/values-kubrix-default.yaml",
+      "line": 4,
+      "column": 14
+    }
+  }
+]

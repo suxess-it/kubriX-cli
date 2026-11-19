@@ -3,7 +3,7 @@ package ui
 import (
 	"errors"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 )
 
 // Form is a set of questions asked together. Fields write the user's answers through their Value pointers,

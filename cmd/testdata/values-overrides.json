@@ -1,0 +1,22 @@
+[
+  {
+    "path": "grafana.ingress.enabled",
+    "assignments": 2,
+    "effectiveValue": true,
+    "effectiveSource": {
+      "file": "platform-apps/charts/grafana/values-size-small.yaml",
+      "line": 4,
+      "column": 14
+    }
+  },
+  {
+    "path": "grafana.replicas",
+    "assignments": 2,
+    "effectiveValue": 2,
+    "effectiveSource": {
+      "file": "platform-apps/charts/grafana/values-size-small.yaml",
+      "line": 2,
+      "column": 13
+    }
+  }
+]

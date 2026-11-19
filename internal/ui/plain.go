@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/charmbracelet/huh/spinner"
+	"charm.land/huh/v2/spinner"
+	"charm.land/lipgloss/v2"
 )
 
 type Plain struct {
@@ -27,7 +28,8 @@ func (p *Plain) Begin(title string) func(error) {
 
 func (p *Plain) Logs() io.Writer { return p.out }
 
-func (p *Plain) Heading(msg string) { _, _ = fmt.Fprintln(p.out, headingStyle.Render(msg)) }
+// Styled lines go through lipgloss.Fprintln, which drops the colors a non-terminal or a dumb terminal can't show.
+func (p *Plain) Heading(msg string) { _, _ = lipgloss.Fprintln(p.out, headingStyle.Render(msg)) }
 func (p *Plain) Info(msg string)    { _, _ = fmt.Fprintln(p.out, msg) }
-func (p *Plain) OK(msg string)      { _, _ = fmt.Fprintln(p.out, okStyle.Render("✓ "+msg)) }
-func (p *Plain) Warn(msg string)    { _, _ = fmt.Fprintln(p.out, warnStyle.Render("! "+msg)) }
+func (p *Plain) OK(msg string)      { _, _ = lipgloss.Fprintln(p.out, okStyle.Render("✓ "+msg)) }
+func (p *Plain) Warn(msg string)    { _, _ = lipgloss.Fprintln(p.out, warnStyle.Render("! "+msg)) }

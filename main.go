@@ -21,7 +21,7 @@ func main() {
 	defer stop()
 	bi, ok := debug.ReadBuildInfo()
 	build := cmd.BuildInfo{Version: version, Commit: commit, Date: date}.WithRuntime(bi, ok)
-	if err := cmd.NewRoot(build, cmd.FeaturesFromEnv(os.Getenv)).ExecuteContext(ctx); err != nil {
-		os.Exit(1)
-	}
+	err := cmd.NewRoot(build, cmd.FeaturesFromEnv(os.Getenv)).ExecuteContext(ctx)
+	stop()
+	os.Exit(cmd.ExitCode(err))
 }

@@ -1,0 +1,10 @@
+mimir:
+  distributor:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+    zones:
+      - zone-a
+      - zone-b
+  storage: filesystem

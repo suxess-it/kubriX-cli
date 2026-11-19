@@ -1,0 +1,37 @@
+[
+  {
+    "name": "grafana",
+    "chart": "sx-grafana",
+    "valueFiles": [
+      "platform-apps/charts/grafana/values-kubrix-default.yaml",
+      "platform-apps/charts/grafana/values-size-small.yaml"
+    ],
+    "sets": [
+      {
+        "expression": "kubriXPlan=oss",
+        "source": "Application sx-grafana parameters:1"
+      },
+      {
+        "expression": "global.repoURL=https://example.com/bootstrap",
+        "source": "Application sx-grafana parameters:2"
+      }
+    ]
+  },
+  {
+    "name": "loki",
+    "chart": "loki",
+    "valueFiles": [
+      "platform-apps/charts/loki/values-kubrix-default.yaml"
+    ],
+    "sets": [
+      {
+        "expression": "kubriXPlan=oss",
+        "source": "Application sx-loki parameters:1"
+      },
+      {
+        "expression": "global.repoURL=https://example.com/bootstrap",
+        "source": "Application sx-loki parameters:2"
+      }
+    ]
+  }
+]

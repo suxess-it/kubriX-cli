@@ -1,0 +1,4 @@
+# This intentional no-op demonstrates both identical redefinition and no-op-file.
+mimir:
+  distributor:
+    replicas: 3

@@ -1,0 +1,17 @@
+version: v1
+targets:
+  kind-hub-prime:
+    applications:
+      mimir:
+        chart: mimir-distributed
+        files:
+          - mimir/values-kubrix-default.yaml
+          - mimir/values-ha-enabled.yaml
+          - mimir/values-size-medium.yaml
+          - mimir/values-customer.yaml
+      loki:
+        chart: loki
+        files:
+          - loki/values-kubrix-default.yaml
+          - loki/values-size-medium.yaml
+          - loki/values-customer.yaml

@@ -1,0 +1,6 @@
+loki:
+  gateway:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 250m
