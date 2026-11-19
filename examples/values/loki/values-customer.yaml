@@ -1,0 +1,5 @@
+loki:
+  schemaConfig:
+    configs:
+      - from: "2025-01-01"
+        store: tsdb

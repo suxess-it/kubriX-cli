@@ -1,0 +1,35 @@
+{
+  "application": "grafana",
+  "chart": "sx-grafana",
+  "path": "grafana.replicas",
+  "effectiveValue": 2,
+  "effectiveSource": {
+    "file": "platform-apps/charts/grafana/values-size-small.yaml",
+    "line": 2,
+    "column": 13
+  },
+  "history": [
+    {
+      "source": {
+        "file": "platform-apps/charts/grafana/values-kubrix-default.yaml",
+        "line": 2,
+        "column": 13
+      },
+      "value": 1,
+      "kind": "scalar",
+      "action": "defined",
+      "effective": false
+    },
+    {
+      "source": {
+        "file": "platform-apps/charts/grafana/values-size-small.yaml",
+        "line": 2,
+        "column": 13
+      },
+      "value": 2,
+      "kind": "scalar",
+      "action": "overridden",
+      "effective": true
+    }
+  ]
+}

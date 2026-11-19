@@ -55,7 +55,7 @@ func NewRoot(build BuildInfo, features Features) *cobra.Command {
 	root.PersistentFlags().Bool("plain", false, "print line by line instead of using the full-screen interface")
 	demo := newDemoCmd(features)
 	demo.AddCommand(newDemoDeleteCmd(features))
-	root.AddCommand(demo, newInstallCmd(features), newUpgradeCmd(features))
+	root.AddCommand(demo, newInstallCmd(features), newUpgradeCmd(features), newValuesCmd(), newDiffCmd())
 	return root
 }
 

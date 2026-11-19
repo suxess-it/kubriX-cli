@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -66,9 +66,7 @@ func RunFullscreen(ctx context.Context, title string, out io.Writer, logPath str
 		}
 	}
 
-	// Detect the background color before bubbletea owns stdin; a later detection would race it for input.
-	lipgloss.HasDarkBackground()
-	f.p = tea.NewProgram(newModel(title, cancel), tea.WithAltScreen())
+	f.p = tea.NewProgram(newModel(title, cancel))
 	flowDone := make(chan error, 1)
 	go func() {
 		err := flow(ctx, f)
@@ -90,11 +88,11 @@ func RunFullscreen(ctx context.Context, title string, out io.Writer, logPath str
 
 	f.mu.Lock()
 	for _, line := range f.summary {
-		_, _ = fmt.Fprintln(out, line)
+		_, _ = lipgloss.Fprintln(out, line)
 	}
 	f.mu.Unlock()
 	if logPath != "" {
-		_, _ = fmt.Fprintln(out, dimStyle.Render("Full log: "+logPath))
+		_, _ = lipgloss.Fprintln(out, dimStyle.Render("Full log: "+logPath))
 	}
 	if flowErr == nil {
 		return runErr
@@ -203,6 +201,7 @@ func newModel(title string, cancel context.CancelFunc) *model {
 		cancel: cancel,
 		start:  time.Now(),
 		spin:   spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(okStyle)),
+		vp:     viewport.New(),
 		follow: true,
 	}
 }
@@ -216,7 +215,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.vp.Width, m.vp.Height = m.mainWidth(), m.bodyHeight()
+		m.vp.SetWidth(m.mainWidth())
+		m.vp.SetHeight(m.bodyHeight())
 		if m.form != nil {
 			m.form = m.form.WithWidth(m.mainWidth())
 		}
@@ -259,7 +259,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.form != nil {
 			break
 		}
@@ -318,7 +318,13 @@ func (m *model) refresh() {
 	}
 }
 
-func (m *model) View() string {
+func (m *model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+func (m *model) render() string {
 	if m.width == 0 {
 		return "starting..."
 	}

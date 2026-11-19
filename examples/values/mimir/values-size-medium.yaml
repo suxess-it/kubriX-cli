@@ -1,0 +1,8 @@
+mimir:
+  distributor:
+    resources:
+      requests:
+        cpu: 500m
+  storage:
+    backend: s3
+    replicas: 3

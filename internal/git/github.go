@@ -197,3 +197,57 @@ func (c *GitHub) OpenPullRequest(ctx context.Context, owner, repo, head, base, t
 	}
 	return pr.GetHTMLURL(), nil
 }
+
+// IssueComment is a comment on an issue or pull request.
+type IssueComment struct {
+	ID     int64
+	Author string
+	Body   string
+}
+
+// Login returns the login of the token's owner. Unlike Validate it checks no scopes, so it works for any token
+// that may read the user (GitHub Actions' GITHUB_TOKEN may not).
+func (c *GitHub) Login(ctx context.Context) (string, error) {
+	user, _, err := c.c.Users.Get(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	return user.GetLogin(), nil
+}
+
+// IssueComments lists all comments of an issue or pull request, oldest first.
+func (c *GitHub) IssueComments(ctx context.Context, owner, repo string, number int) ([]IssueComment, error) {
+	var out []IssueComment
+	opts := &gh.IssueListCommentsOptions{ListOptions: gh.ListOptions{PerPage: 100}}
+	for {
+		page, resp, err := c.c.Issues.ListComments(ctx, owner, repo, number, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, cm := range page {
+			out = append(out, IssueComment{ID: cm.GetID(), Author: cm.GetUser().GetLogin(), Body: cm.GetBody()})
+		}
+		if resp.NextPage == 0 {
+			return out, nil
+		}
+		opts.Page = resp.NextPage
+	}
+}
+
+// CreateIssueComment adds a comment to an issue or pull request.
+func (c *GitHub) CreateIssueComment(ctx context.Context, owner, repo string, number int, body string) error {
+	_, _, err := c.c.Issues.CreateComment(ctx, owner, repo, number, gh.IssueCommentRequest{Body: body})
+	return err
+}
+
+// EditIssueComment replaces the body of a comment.
+func (c *GitHub) EditIssueComment(ctx context.Context, owner, repo string, id int64, body string) error {
+	_, _, err := c.c.Issues.UpdateComment(ctx, owner, repo, id, gh.IssueCommentRequest{Body: body})
+	return err
+}
+
+// DeleteIssueComment deletes a comment.
+func (c *GitHub) DeleteIssueComment(ctx context.Context, owner, repo string, id int64) error {
+	_, err := c.c.Issues.DeleteComment(ctx, owner, repo, id)
+	return err
+}

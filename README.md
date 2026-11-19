@@ -158,6 +158,49 @@ KUBRIX_EXPERIMENTAL=1 KUBRIX_DNS_TOKEN=... kubrix install --config kubrix.yaml
 
 Repositories bootstrapped with `KUBRIX_BOOTSTRAP_KEEP_HISTORY=false` share no history with kubriX and can't be upgraded this way.
 
+## Explaining values with `kubrix values`
+
+`kubrix values` shows how the ordered Helm values files of an application combine, in a platform repository or an
+upstream kubriX checkout. It reads what Argo CD reads: `bootstrap-app-<target type>.yaml` lists the target chart's
+values files, and each rendered Application lists its chart's values files and parameters. Templates
+(`*.yaml.tmpl`) are rendered in memory with `bootstrap/customer-config.yaml`, or with `--customer-config FILE`, over
+the defaults of a plain k8s cluster.
+
+```bash
+kubrix values apps      --repo . --target-type kubrix-oss-stack             # applications and their values files
+kubrix values merge     --repo . --target-type kind --app grafana --show-sources
+kubrix values explain grafana.ingress.enabled --repo . --target-type kind --app grafana
+kubrix values overrides --repo . --target-type kind --app grafana           # values set more than once
+kubrix values lint      --repo . --target-type kind --app grafana --fail-on warning   # exit code 2 on a warning
+kubrix values search ingress.enabled --repo . --target-type kind            # across all applications
+```
+
+`--file` and `--set` merge files and expressions given on the command line instead. A `.kubrix-values.yaml` in
+`--repo` (or `--values-config FILE`) lists the files per target type by hand, for repositories without a kubriX
+target chart; see `examples/values/`. `--format json` prints the output for scripts; `apps --format json` lists each
+application's values files and parameters in merge order.
+
+## Reviewing a change with `kubrix diff`
+
+`kubrix diff` renders the charts a change touches on the base revision and on the change, and shows what differs:
+the rendered manifests per test case, the subcharts' default values, and the effective values with the file and line
+that now set them. By default the test cases are all target types, so every chart is rendered with exactly the values
+files and parameters Argo CD would give it.
+
+```bash
+kubrix diff --base origin/main                                    # the working tree against main
+kubrix diff --base origin/main --head my-branch --target-type kind --charts grafana
+kubrix diff --base origin/main --format markdown --output-dir out # PR comments and the full diff as files
+kubrix diff --base origin/main --pr 123 --dry-run                 # what would be posted to the PR
+```
+
+Chart dependencies are built in temporary copies, so the repository is never changed. With `--pr` the result is
+posted as a summary comment and one comment per changed chart (all comments start with a `<!-- gitops-diff:… -->`
+marker); a later run updates or deletes its own comments. The token comes from `GITHUB_TOKEN` or the gh CLI. In
+GitHub Actions the comments are `github-actions[bot]`'s. A test case can also be given by hand, as the kubriX
+GitOps diff workflow used to:
+`--test-case 'default-kind=values-kubrix-default.yaml,values-cluster-kind.yaml;--set a=b'`.
+
 ## Saved files
 
 They are stored in `~/.config/kubrix/` on Linux and macOS (`$XDG_CONFIG_HOME/kubrix/` if that is set) and in `%AppData%\kubrix\` on Windows:
@@ -191,7 +234,7 @@ After a separate confirmation, it can also delete the GitHub repository. That ne
 go vet ./... && go test ./...
 ```
 
-No CI runs these yet. Several tests guard against drift from the rest of the repository; run `go test ./...` after changing any of these files:
+[docs/testing.md](docs/testing.md) explains which layer tests what. Several tests guard against drift from the rest of the repository; run `go test ./...` after changing any of these files:
 
 - `.github/kind-config.yaml`: compared with `kindcluster.Config()`.
 - `install-platform.sh`: its `customer-config.yaml` heredoc is compared with `render.CustomerConfig`.

@@ -1,0 +1,10 @@
+loki:
+  gateway:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb

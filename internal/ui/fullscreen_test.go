@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -42,7 +42,10 @@ func TestModelRendersStepsAndTranscript(t *testing.T) {
 	drive(m, stepEndMsg{id: 2, err: errors.New("boom")}, 1)
 	drive(m, textMsg("installer says hello\r\n"), 1)
 
-	view := ansi.Strip(m.View())
+	if !m.View().AltScreen {
+		t.Fatal("the full-screen app must use the alternate screen")
+	}
+	view := ansi.Strip(m.View().Content)
 	for _, want := range []string{"kubriX · kind demo", "Steps", "✓ Creating kind cluster", "✗ Installing kubriX", "installer says hello", "ctrl+c cancel"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view is missing %q:\n%s", want, view)
@@ -61,11 +64,11 @@ func TestModelFormRoundTrip(t *testing.T) {
 	form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Proceed?").Affirmative("Yes").Negative("No").Value(&ok)))
 	done := make(chan error, 1)
 	drive(m, formMsg{form: form, done: done}, 3)
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "Proceed?") {
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "Proceed?") {
 		t.Fatalf("form not shown:\n%s", view)
 	}
-	drive(m, tea.KeyMsg{Type: tea.KeyLeft}, 3)
-	drive(m, tea.KeyMsg{Type: tea.KeyEnter}, 5)
+	drive(m, tea.KeyPressMsg{Code: tea.KeyLeft}, 3)
+	drive(m, tea.KeyPressMsg{Code: tea.KeyEnter}, 5)
 
 	select {
 	case err := <-done:
@@ -88,7 +91,7 @@ func TestModelFormAbort(t *testing.T) {
 	drive(m, tea.WindowSizeMsg{Width: 120, Height: 30}, 1)
 	done := make(chan error, 1)
 	drive(m, formMsg{form: huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Proceed?"))), done: done}, 3)
-	drive(m, tea.KeyMsg{Type: tea.KeyCtrlC}, 3)
+	drive(m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, 3)
 	if err := <-done; !errors.Is(err, huh.ErrUserAborted) {
 		t.Fatalf("got %v, want ErrUserAborted", err)
 	}
@@ -98,13 +101,13 @@ func TestModelCancelThenQuit(t *testing.T) {
 	cancelled := false
 	m := newModel("kind demo", func() { cancelled = true })
 	drive(m, tea.WindowSizeMsg{Width: 120, Height: 30}, 1)
-	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd != nil || !cancelled {
+	if _, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); cmd != nil || !cancelled {
 		t.Fatal("first ctrl+c must cancel the flow, not quit")
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "cancelling") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "cancelling") {
 		t.Error("status should say cancelling")
 	}
-	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd == nil {
+	if _, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); cmd == nil {
 		t.Fatal("second ctrl+c must quit")
 	}
 }

@@ -1,0 +1,7 @@
+mimir:
+  distributor:
+    replicas: 3
+    zones:
+      - zone-a
+      - zone-b
+      - zone-c

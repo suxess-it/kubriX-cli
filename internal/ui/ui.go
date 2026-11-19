@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // UI is what the command flows talk to; Plain prints line by line, Fullscreen renders a full-screen app.

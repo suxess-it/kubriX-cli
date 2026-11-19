@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/charmbracelet/huh"
+import "charm.land/huh/v2"
 
 // toHuh renders a Form with huh; it is the only place that knows how fields look.
 func toHuh(f Form) *huh.Form {
