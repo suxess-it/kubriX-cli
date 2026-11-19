@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "postUpdateOptions": ["gomodTidy"],
+  "ignorePaths": ["Formula/**"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Modules compiled into the binary ship to users, so their updates cut a patch release.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["require"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "One PR for the Go toolchain across go.mod, workflows and the Dockerfile.",
+      "matchPackageNames": ["go", "golang"],
+      "groupName": "go toolchain"
+    },
+    {
+      "description": "Group GitHub Actions minor and patch bumps.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Merge minor and patch updates once required checks pass.",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "automerge": true
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "golangci-lint version pinned in the lint workflow.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/golangci_lint\\.yaml$/"],
+      "matchStrings": ["golangci/golangci-lint-action@\\S+[\\s\\S]*?version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "golangci/golangci-lint",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
