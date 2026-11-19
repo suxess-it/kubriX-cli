@@ -12,6 +12,8 @@ Keep **Target** (a cluster) and **Target type** (a kubriX profile) apart in code
 - **Before handing off,** the tree is clean: `gofmt`, `go vet ./...`, `golangci-lint run` (default linters, no config
   file) and `go mod tidy` all leave nothing to fix. Best-effort terminal writes are `_, _ = fmt.Fprint…`, the
   repository's answer to errcheck.
+- **Bugs are fixed on sight.** A bug, red check or lint finding you hit gets fixed in the change you are making,
+  wherever it was caused; the tree you hand off is green.
 - **Dead code goes in the same change** that makes it dead: unused helpers, flags, branches and test helpers.
 - **Helm runs in-process** through the Helm v4 SDK; the CLI never shells out to `helm`. YAML that needs line numbers
   uses `go.yaml.in/yaml/v3`; other YAML uses `sigs.k8s.io/yaml`.

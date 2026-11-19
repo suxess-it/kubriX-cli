@@ -156,10 +156,13 @@ func Run(ctx context.Context, kc Kube, p Progress, o Options) error {
 	}
 
 	end := p.Begin("Installing kubriX (installer logs)")
-	logsDone := make(chan error, 1)
+	logsDone := make(chan struct{})
 	logCtx, stopLogs := context.WithCancel(ctx)
 	defer stopLogs()
-	go func() { logsDone <- kc.StreamLogs(logCtx, Namespace, pod, p.Logs()) }()
+	go func() {
+		_ = kc.StreamLogs(logCtx, Namespace, pod, p.Logs()) // best-effort; the job's result decides the outcome
+		close(logsDone)
+	}()
 
 	succeeded, err := kc.WaitForJob(ctx, Namespace, JobName)
 	select {
