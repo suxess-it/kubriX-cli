@@ -136,6 +136,22 @@ func TestBranchOnFreshRepoIsBootstrappedByTheInstaller(t *testing.T) {
 	}
 }
 
+func TestInstallerGetsTheRepoURLWithoutGitSuffix(t *testing.T) {
+	f := newFixture(t)
+	f.host.URLs["acme/demo"] = "https://github.com/acme/demo.git"
+	target, _ := f.kind(false, false)
+	plan, err := install.Inspect(context.Background(), f.deps(), target, f.selection("feat/x"), f.progress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.Run(context.Background(), f.progress, func(state.Installation) {}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.cluster.Secret["KUBRIX_REPO"]; got != "https://github.com/acme/demo" {
+		t.Errorf("KUBRIX_REPO = %q, want https://github.com/acme/demo", got)
+	}
+}
+
 func TestRepoWithContentIsNeverBootstrapped(t *testing.T) {
 	f := newFixture(t)
 	f.host.Repos["acme/demo"] = git.RepoNonEmpty
