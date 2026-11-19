@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.5](https://github.com/suxess-it/kubriX-cli/compare/v0.1.4...v0.1.5) (2026-11-19)
+
+
+### Features
+
+* add values, diff, update charmbracelet and add govulncheck ([500dfdb](https://github.com/suxess-it/kubriX-cli/commit/500dfdb09c2dd3f56a34bc3587eca668ce610024))
+* fix some bugs in diff ([bc692c1](https://github.com/suxess-it/kubriX-cli/commit/bc692c126c0d4d050a1e2c0d2eb65943ed9bd31c))
+* improve documentation ([f180008](https://github.com/suxess-it/kubriX-cli/commit/f180008823c081133fe1a76109d029a83273d478))
+* values, diff, and update charmbracelet with govulncheck ([bbca558](https://github.com/suxess-it/kubriX-cli/commit/bbca558546ad38cd63ea32e5c2a90c13064a509b))
+
 ## [0.1.4](https://github.com/suxess-it/kubriX-cli/compare/v0.1.3...v0.1.4) (2026-11-19)
 
 
