@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -43,7 +44,7 @@ func commit(t *testing.T, dir, msg string) {
 	t.Helper()
 	g := testrepo.Git(t, dir)
 	testrepo.Run(t, g, "add", "-A")
-	testrepo.Run(t, g, "commit", "-q", "-m", msg)
+	testrepo.Run(t, g, "commit", "-q", "--allow-empty", "-m", msg)
 }
 
 // countingDependencies builds dependencies with helm and counts how often it is asked to.
@@ -258,5 +259,107 @@ func TestRenderedDocumentsAreHeadedLikeHelmTemplate(t *testing.T) {
 	}
 	if filepath.Base(baseName) != "target" || headName != "pr" {
 		t.Fatal("revision names are part of the comment contract")
+	}
+}
+
+// A chart that fails to render is reported with the revision it fails on and does not end the diff.
+func TestRenderingFailuresAreClassifiedByRevision(t *testing.T) {
+	failing := "{{ fail \"loki is broken\" }}\n"
+	cases := []struct {
+		name       string
+		base, head string // loki's extra template on each side; empty means none
+		want       FailureStatus
+	}{
+		{"failing on the change only", "", failing, Broken},
+		{"failing on both revisions", failing, failing + "# changed\n", StillBroken},
+		{"failing on the base only", failing, "", Fixed},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := platformRepo(t)
+			write := func(body string) {
+				path := filepath.Join(dir, "platform-apps/charts/loki/templates/broken.yaml")
+				if body == "" {
+					_ = os.Remove(path)
+					return
+				}
+				testrepo.Write(t, dir, map[string]string{"platform-apps/charts/loki/templates/broken.yaml": body})
+			}
+			write(c.base)
+			commit(t, dir, "base side")
+			write(c.head)
+			testrepo.Write(t, dir, map[string]string{"platform-apps/charts/grafana/values-size-small.yaml": "grafana:\n  replicas: 5\n"})
+			commit(t, dir, "change")
+
+			r := run(t, Options{Repo: dir, Base: "HEAD~1", Head: "HEAD", AllCharts: true})
+			if len(r.Failures) != 1 || r.Failures[0].Chart != "loki" || r.Failures[0].Status != c.want || !strings.Contains(r.Failures[0].Error, "loki is broken") {
+				t.Fatalf("failures = %+v, want loki %s", r.Failures, c.want)
+			}
+			for _, f := range r.Files {
+				if f.Chart == "loki" {
+					t.Fatalf("a failed chart's files are compared: %s", f.Path)
+				}
+			}
+			if got := paths(r.Files); !reflect.DeepEqual(got, []string{"modified grafana/small/sx-grafana/templates/config.yaml"}) {
+				t.Fatalf("the other charts are still diffed: %v", got)
+			}
+			if (len(r.Broken()) == 1) != (c.want == Broken) {
+				t.Fatalf("Broken() = %v", r.Broken())
+			}
+		})
+	}
+}
+
+func TestATestCaseThatDoesNotResolveIsAFailureNotAnError(t *testing.T) {
+	dir := platformRepo(t)
+	testrepo.Write(t, dir, map[string]string{"platform-apps/target-chart/values-small.yaml": "applications:\n- name: loki\n"}) // a list with applicationMap: the target chart fails
+	commit(t, dir, "break the target type")
+	r := run(t, Options{Repo: dir, Base: "HEAD~1", Head: "HEAD", TestCases: []TestCase{{Name: "small", TargetType: "small"}}})
+	if len(r.Failures) != 1 || r.Failures[0].Chart != "" || r.Failures[0].Status != Broken || len(r.Files) != 0 {
+		t.Fatalf("report = %+v", r)
+	}
+}
+
+func TestListChoicesOffersBothRevisionsAndMarksTheChangedCharts(t *testing.T) {
+	dir := platformRepo(t)
+	testrepo.Write(t, dir, map[string]string{
+		"bootstrap-app-big.yaml":                           testrepo.BootstrapApp("values-kubrix-default.yaml"),
+		"platform-apps/target-chart/values-solo.yaml.tmpl": "",
+	})
+	commit(t, dir, "base: more target types")
+	testrepo.Write(t, dir, map[string]string{"platform-apps/charts/tempo/Chart.yaml": "apiVersion: v2\nname: tempo\nversion: 0.1.0\n"})
+	commit(t, dir, "head: a new chart")
+	testrepo.Write(t, dir, map[string]string{
+		"platform-apps/charts/grafana/values-size-small.yaml": "grafana:\n  replicas: 9\n",
+		"platform-apps/charts/mimir/Chart.yaml":               "apiVersion: v2\nname: mimir\nversion: 0.1.0\n", // untracked
+	})
+	cases := []struct {
+		name, head string
+		want       Choices
+	}{
+		{"a revision", "HEAD", Choices{TargetTypes: []string{"big", "small", "solo"}, Charts: []string{"grafana", "loki", "tempo"}, Changed: []string{"tempo"}}},
+		{"the working tree, untracked files included", "", Choices{TargetTypes: []string{"big", "small", "solo"}, Charts: []string{"grafana", "loki", "mimir", "tempo"}, Changed: []string{"grafana", "mimir", "tempo"}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := ListChoices(context.Background(), dir, "HEAD~1", c.head)
+			if err != nil || !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("choices = %+v, %v\nwant %+v", got, err, c.want)
+			}
+		})
+	}
+	if _, err := ListChoices(context.Background(), dir, "nope", ""); err == nil {
+		t.Fatal("an unknown base must be an error")
+	}
+}
+
+func TestBaseCandidatesPutTheRemoteDefaultBranchFirst(t *testing.T) {
+	remote := platformRepo(t)
+	dir := testrepo.Clone(t, remote)
+	g := testrepo.Git(t, dir)
+	testrepo.Run(t, g, "branch", "feature")
+	got, err := BaseCandidates(context.Background(), dir)
+	if err != nil || len(got) < 3 || got[0] != "origin/main" || !slices.Contains(got, "feature") || slices.Contains(got, "origin") || slices.Contains(got, "origin/HEAD") {
+		t.Fatalf("candidates = %v, %v", got, err)
 	}
 }

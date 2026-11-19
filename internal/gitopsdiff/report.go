@@ -53,16 +53,50 @@ type ValueChange struct {
 	Source engine.SourceLocation `json:"source"`
 }
 
+// Failure is a chart that could not be rendered with a test case on one or both revisions, or, with an empty
+// Chart, a test case whose applications could not be resolved. Its rendered files are not compared.
+type Failure struct {
+	Chart    string        `json:"chart,omitempty"`
+	TestCase string        `json:"testCase"`
+	Status   FailureStatus `json:"status"`
+	// Error is the head revision's error, or the base revision's for a failure the change fixes.
+	Error string `json:"error"`
+}
+
+// FailureStatus says which revision a failure is on.
+type FailureStatus string
+
+const (
+	// Broken fails on the change only: the change breaks rendering.
+	Broken FailureStatus = "broken"
+	// StillBroken fails on both revisions: the change neither caused nor fixed it.
+	StillBroken FailureStatus = "still-broken"
+	// Fixed fails on the base revision only: the change fixes it.
+	Fixed FailureStatus = "fixed"
+)
+
 // Report is everything that changed, sorted by chart, test case and path.
 type Report struct {
 	Files             []FileDiff    `json:"files"`
 	DefaultValuesDiff string        `json:"defaultValuesDiff"`
 	ValueChanges      []ValueChange `json:"valueChanges"`
+	Failures          []Failure     `json:"failures"`
 }
 
 // Empty reports whether nothing changed.
 func (r *Report) Empty() bool {
-	return len(r.Files) == 0 && r.DefaultValuesDiff == "" && len(r.ValueChanges) == 0
+	return len(r.Files) == 0 && r.DefaultValuesDiff == "" && len(r.ValueChanges) == 0 && len(r.Failures) == 0
+}
+
+// Broken are the failures the change introduces.
+func (r *Report) Broken() []Failure {
+	var out []Failure
+	for _, f := range r.Failures {
+		if f.Status == Broken {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // diffFile returns the diff of one file, or false when it did not change. A file that exists on one side only is

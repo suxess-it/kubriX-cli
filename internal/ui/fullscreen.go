@@ -336,13 +336,14 @@ func (m *model) render() string {
 	header := headingStyle.Render(" kubriX · "+m.title) + dimStyle.Render("  "+elapsed)
 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
-	sidebar := box.Width(sidebarWidth - 2).Height(m.bodyHeight()).Render(m.stepsView(sidebarWidth-2, m.bodyHeight()))
+	// Sizes include the border: the boxes hold bodyHeight lines, the sidebar sidebarWidth-2 columns.
+	sidebar := box.Width(sidebarWidth).Height(m.bodyHeight() + 2).Render(m.stepsView(sidebarWidth-2, m.bodyHeight()))
 
 	main := m.vp.View()
 	if m.form != nil {
 		main = m.form.View()
 	}
-	mainBox := box.Width(m.mainWidth()).Height(m.bodyHeight()).MaxHeight(m.bodyHeight() + 2).Render(main)
+	mainBox := box.Width(m.mainWidth() + 2).Height(m.bodyHeight() + 2).MaxHeight(m.bodyHeight() + 2).Render(main)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,

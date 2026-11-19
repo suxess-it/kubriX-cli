@@ -171,3 +171,18 @@ func TestMarkerNameFindsOnlyALeadingMarker(t *testing.T) {
 		}
 	}
 }
+
+func TestFailuresAreListedFirstInTheSummaryBrokenOnesFirst(t *testing.T) {
+	r := &Report{Failures: []Failure{
+		{Chart: "keycloak", TestCase: "kind-base", Status: StillBroken, Error: "wrong type\nfor value"},
+		{TestCase: "peak", Status: Fixed, Error: "x"},
+		{Chart: "loki", TestCase: "kind", Status: Broken, Error: "boom"},
+	}}
+	s := comments(r)["summary"]
+	broken := strings.Index(s, "❌ **broken by this change**: `loki · kind`")
+	still := strings.Index(s, "⚠️ **already broken on the base**: `keycloak · kind-base`")
+	fixed := strings.Index(s, "✅ **fixed by this change**: `test case peak`")
+	if broken < 0 || still < broken || fixed < still || !strings.Contains(s, "  wrong type\n  for value") {
+		t.Fatalf("summary:\n%s", s)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/suxess-it/kubrix-cli/internal/git"
 	"github.com/suxess-it/kubrix-cli/internal/gitopsdiff"
 	"github.com/suxess-it/kubrix-cli/internal/testrepo"
+	"github.com/suxess-it/kubrix-cli/internal/ui"
 	"github.com/suxess-it/kubrix-cli/internal/values/engine"
 )
 
@@ -153,8 +154,8 @@ func TestDiffRejectsBadInput(t *testing.T) {
 			}
 		})
 	}
-	if _, _, err := kubrix(t, "diff"); err == nil || !strings.Contains(err.Error(), `required flag(s) "base" not set`) {
-		t.Fatalf("without --base: %v", err)
+	if _, _, err := kubrix(t, "diff", "--repo", dir); err == nil || !strings.Contains(err.Error(), "--base is required when the output is not a terminal") {
+		t.Fatalf("without --base and a terminal: %v", err)
 	}
 }
 
@@ -188,5 +189,79 @@ func TestDiffRendersAChartOfTheKubrixRepository(t *testing.T) {
 	}
 	if !report.Empty() {
 		t.Fatalf("HEAD against itself changed: %+v", report)
+	}
+}
+
+func TestDiffExitsWithTwoWhenTheChangeBreaksRendering(t *testing.T) {
+	dir := diffRepo(t)
+	testrepo.Write(t, dir, map[string]string{"platform-apps/charts/grafana/templates/broken.yaml": "{{ fail \"nope\" }}\n"})
+	var stdout bytes.Buffer
+	err := runDiff(context.Background(), diffFlags{repo: dir, base: "HEAD", charts: "changed", format: "text"}, fakeDiffServices(&fakeCommentClient{}), &stdout, &bytes.Buffer{})
+	if ExitCode(err) != 2 || !strings.Contains(err.Error(), "the change breaks rendering of grafana · small") {
+		t.Fatalf("error = %v (exit %d)", err, ExitCode(err))
+	}
+	if !strings.Contains(stdout.String(), "grafana · small  broken by this change") {
+		t.Fatalf("the result is written before failing:\n%s", stdout.String())
+	}
+}
+
+func TestDiffOpensTheViewerOnlyInATerminalForAPerson(t *testing.T) {
+	cases := []struct {
+		name            string
+		f               diffFlags
+		plain, terminal bool
+		want            bool
+	}{
+		{"a terminal", diffFlags{}, false, true, true},
+		{"no terminal", diffFlags{}, false, false, false},
+		{"--plain or an explicit --format", diffFlags{}, true, true, false},
+		{"--output-dir", diffFlags{outputDir: "out"}, false, true, false},
+		{"--pr", diffFlags{pr: 1}, false, true, false},
+	}
+	for _, c := range cases {
+		if got := diffInteractive(c.f, c.plain, c.terminal); got != c.want {
+			t.Errorf("%s: interactive = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestDiffChoicesSelectWhatTheFlagsNameOrElseTheDefaults(t *testing.T) {
+	c := gitopsdiff.Choices{TargetTypes: []string{"kind", "peak"}, Charts: []string{"grafana", "loki"}, Changed: []string{"grafana"}}
+	sel := func(opts []ui.Option) string {
+		var out []string
+		for _, o := range opts {
+			if o.Selected {
+				out = append(out, o.Label)
+			}
+		}
+		return strings.Join(out, ",")
+	}
+	cases := []struct {
+		name             string
+		opts             gitopsdiff.Options
+		testCases, chart string
+	}{
+		{"no flags: every target type and the changed charts", gitopsdiff.Options{}, "kind,peak", "grafana (changed)"},
+		{"--target-type and --charts", gitopsdiff.Options{TestCases: []gitopsdiff.TestCase{{Name: "peak", TargetType: "peak"}}, Charts: []string{"loki"}}, "peak", "loki"},
+		{"a hand-made test case and --charts all", gitopsdiff.Options{TestCases: []gitopsdiff.TestCase{{Name: "manual", Files: []string{"v.yaml"}}}, AllCharts: true}, "manual", "grafana (changed),loki"},
+	}
+	for _, tc := range cases {
+		got := diffChoices(tc.opts, c)
+		if sel(got.TestCases) != tc.testCases || sel(got.Charts) != tc.chart {
+			t.Errorf("%s: selected test cases %q, charts %q; want %q, %q", tc.name, sel(got.TestCases), sel(got.Charts), tc.testCases, tc.chart)
+		}
+	}
+}
+
+func TestSelectedOptionsKeepHandMadeTestCasesAndNameTheCharts(t *testing.T) {
+	manual := gitopsdiff.TestCase{Name: "manual", Files: []string{"v.yaml"}}
+	opts := gitopsdiff.Options{Repo: "r", TestCases: []gitopsdiff.TestCase{manual}, AllCharts: true}
+	got := selectedOptions(opts, ui.DiffSelection{Base: "main", TestCases: []string{"manual", "kind"}, Charts: []string{"loki"}})
+	want := []gitopsdiff.TestCase{manual, {Name: "kind", TargetType: "kind"}}
+	if got.Base != "main" || got.AllCharts || !reflect.DeepEqual(got.Charts, []string{"loki"}) || !reflect.DeepEqual(got.TestCases, want) {
+		t.Fatalf("options = %+v", got)
+	}
+	if kept := selectedOptions(opts, ui.DiffSelection{Base: "main"}); !kept.AllCharts || len(kept.TestCases) != 1 {
+		t.Fatalf("an empty selection keeps the defaults: %+v", kept)
 	}
 }

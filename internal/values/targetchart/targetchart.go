@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -80,29 +81,42 @@ func LoadConfig(repo, path string) (map[string]any, error) {
 // TargetTypes lists the target types of a repository: those with a bootstrap Application, and those with only a
 // target values file.
 func TargetTypes(repo string) ([]string, error) {
-	seen := map[string]bool{}
-	add := func(pattern, prefix string) error {
+	var paths []string
+	for _, pattern := range []string{"bootstrap-app-*", filepath.Join(Dir, "values-*")} {
 		matches, err := filepath.Glob(filepath.Join(repo, pattern))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, m := range matches {
-			name := strings.TrimSuffix(strings.TrimSuffix(filepath.Base(m), ".tmpl"), ".yaml")
-			name = strings.TrimPrefix(name, prefix)
-			if name != "kubrix-default" && name != "customer" && name != "customer-generated" {
-				seen[name] = true
+			rel, err := filepath.Rel(repo, m)
+			if err != nil {
+				return nil, err
 			}
-		}
-		return nil
-	}
-	for _, pattern := range []string{"bootstrap-app-*.yaml", "bootstrap-app-*.yaml.tmpl"} {
-		if err := add(pattern, "bootstrap-app-"); err != nil {
-			return nil, err
+			paths = append(paths, filepath.ToSlash(rel))
 		}
 	}
-	for _, pattern := range []string{"values-*.yaml", "values-*.yaml.tmpl"} {
-		if err := add(filepath.Join(Dir, pattern), "values-"); err != nil {
-			return nil, err
+	return TargetTypesOf(paths), nil
+}
+
+// TargetTypesOf lists the target types named by repository paths, sorted: bootstrap-app-<type>.yaml at the root and
+// platform-apps/target-chart/values-<type>.yaml, either possibly a template. Other paths are ignored.
+func TargetTypesOf(paths []string) []string {
+	seen := map[string]bool{}
+	for _, p := range paths {
+		dir, base := path.Split(p)
+		var prefix string
+		switch {
+		case dir == "" && strings.HasPrefix(base, "bootstrap-app-"):
+			prefix = "bootstrap-app-"
+		case dir == Dir+"/" && strings.HasPrefix(base, "values-"):
+			prefix = "values-"
+		default:
+			continue
+		}
+		name, ok := strings.CutSuffix(strings.TrimSuffix(base, ".tmpl"), ".yaml")
+		name = strings.TrimPrefix(name, prefix)
+		if ok && name != "kubrix-default" && name != "customer" && name != "customer-generated" {
+			seen[name] = true
 		}
 	}
 	out := make([]string, 0, len(seen))
@@ -110,7 +124,7 @@ func TargetTypes(repo string) ([]string, error) {
 		out = append(out, name)
 	}
 	sort.Strings(out)
-	return out, nil
+	return out
 }
 
 // Load resolves every application the target chart renders for the selected target type.

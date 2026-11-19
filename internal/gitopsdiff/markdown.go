@@ -122,6 +122,51 @@ func renderSummaryTable(files []FileDiff) string {
 	return strings.Join(lines, "\n") + "\n\n"
 }
 
+// FailureLabel describes a failure's status for people.
+func FailureLabel(s FailureStatus) string {
+	switch s {
+	case Broken:
+		return "broken by this change"
+	case Fixed:
+		return "fixed by this change"
+	default:
+		return "already broken on the base"
+	}
+}
+
+// FailureSubject names what failed: a chart with a test case, or a whole test case.
+func FailureSubject(f Failure) string {
+	if f.Chart == "" {
+		return "test case " + f.TestCase
+	}
+	return f.Chart + " · " + f.TestCase
+}
+
+// renderFailures lists what could not be rendered, the failures the change introduces first.
+func renderFailures(failures []Failure) string {
+	if len(failures) == 0 {
+		return ""
+	}
+	icons := map[FailureStatus]string{Broken: "❌", StillBroken: "⚠️", Fixed: "✅"}
+	var b strings.Builder
+	b.WriteString("#### Rendering failures\n\n")
+	for _, status := range []FailureStatus{Broken, StillBroken, Fixed} {
+		for _, f := range failures {
+			if f.Status != status {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s **%s**: `%s`\n", icons[status], FailureLabel(status), FailureSubject(f))
+			text := f.Error
+			if len(text) > 2000 {
+				text = text[:2000] + "…"
+			}
+			fence := codeFence(text)
+			fmt.Fprintf(&b, "  <details><summary>error</summary>\n\n  %s\n  %s\n  %s\n\n  </details>\n", fence, strings.ReplaceAll(text, "\n", "\n  "), fence)
+		}
+	}
+	return b.String() + "\n"
+}
+
 // renderValueChanges lists the changed effective values with the file and line that now set them (new in kubrix diff).
 func renderValueChanges(changes []ValueChange) string {
 	if len(changes) == 0 {
@@ -155,10 +200,11 @@ func cellSource(c ValueChange) string {
 func renderSummary(r *Report, charts []string, runURL string) string {
 	var parts []string
 	parts = append(parts, Marker("summary"), "### GitOps diff\n\n")
-	if len(r.Files) == 0 && r.DefaultValuesDiff == "" && len(r.ValueChanges) == 0 {
+	if r.Empty() {
 		parts = append(parts, "No changes in the rendered manifests or the default values.\n")
 		return strings.Join(parts, "")
 	}
+	parts = append(parts, renderFailures(r.Failures))
 	parts = append(parts, renderSummaryTable(r.Files))
 	if len(charts) > MaxChartComments {
 		parts = append(parts, fmt.Sprintf("%d charts changed, so their rendered diffs are not posted as separate comments (limit: %d).\n\n", len(charts), MaxChartComments))

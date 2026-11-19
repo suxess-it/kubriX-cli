@@ -50,6 +50,8 @@ type Options struct {
 	Dependencies DependencyBuilder
 	// Parallel renders this many charts at once; 0 uses the number of CPUs.
 	Parallel int
+	// Progress, if set, is called after each rendering; calls are serialised.
+	Progress func(Progress)
 }
 
 // Run checks out both revisions, renders the selected charts with every test case and reports what changed.
@@ -141,72 +143,98 @@ type differ struct {
 }
 
 // rendering is one chart of one revision rendered with one test case; it is empty when the test case does not
-// install the chart in that revision.
+// install the chart in that revision, and err is set when it could not be rendered.
 type rendering struct {
 	files  map[string]string
 	values *engine.Result
+	err    error
+}
+
+// Progress reports how many of the renderings a diff needs are done; Done is the last one finished.
+type Progress struct {
+	Done, Total int
+	Last        string
 }
 
 func (d *differ) run(ctx context.Context, charts []string, testCases []TestCase) (*Report, error) {
 	apps := map[string]map[string]map[string]*overlay.App{} // revision → test case → chart → app
+	resolveErrs := map[string]error{}                       // revision/test case
 	for rev, dir := range d.revs {
 		apps[rev] = map[string]map[string]*overlay.App{}
 		for _, tc := range testCases {
 			byChart, err := d.resolve(dir, tc, charts)
 			if err != nil {
-				return nil, fmt.Errorf("%s revision, test case %s: %w", rev, tc.Name, err)
+				resolveErrs[rev+"/"+tc.Name] = err
+				continue
 			}
 			apps[rev][tc.Name] = byChart
 		}
 	}
 
-	var mu sync.Mutex
-	results := map[string]rendering{} // revision/chart/test case
-	defaults := map[string]map[string]string{}
-	group, gctx := errgroup.WithContext(ctx)
-	group.SetLimit(cmp.Or(d.opts.Parallel, runtime.NumCPU()))
+	type job struct {
+		rev, chart, chartDir string
+		tc                   TestCase
+		app                  *overlay.App
+	}
+	var jobs []job
 	for rev, dir := range d.revs {
 		for _, chart := range charts {
 			chartDir := filepath.Join(dir, ChartsDir, chart)
 			if _, err := os.Stat(chartDir); err != nil {
 				continue
 			}
-			group.Go(func() error {
-				ch, err := d.renderer.load(gctx, rev, chartDir)
-				if err != nil {
-					return err
-				}
-				mu.Lock()
-				defaults[rev] = mergeInto(defaults[rev], defaultValues(ch))
-				mu.Unlock()
-				return nil
-			})
 			for _, tc := range testCases {
-				app := apps[rev][tc.Name][chart]
-				if app == nil {
-					continue
+				if app := apps[rev][tc.Name][chart]; app != nil {
+					jobs = append(jobs, job{rev, chart, chartDir, tc, app})
 				}
-				group.Go(func() error {
-					r, err := d.render(gctx, rev, chartDir, chart, tc, app)
-					if err != nil {
-						return fmt.Errorf("%s revision, chart %s, test case %s: %w", rev, chart, tc.Name, err)
-					}
-					mu.Lock()
-					results[rev+"/"+chart+"/"+tc.Name] = r
-					mu.Unlock()
-					return nil
-				})
 			}
 		}
+	}
+
+	var mu sync.Mutex
+	results := map[string]rendering{} // revision/chart/test case
+	defaults := map[string]map[string]string{}
+	loaded := map[string]bool{} // revision/chart whose default values were read
+	done := 0
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(cmp.Or(d.opts.Parallel, runtime.NumCPU()))
+	for _, j := range jobs {
+		group.Go(func() error {
+			r, chartDefaults := d.render(gctx, j.rev, j.chartDir, j.chart, j.tc, j.app)
+			if err := gctx.Err(); err != nil {
+				return err // cancelled: no result is a rendering failure
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			results[j.rev+"/"+j.chart+"/"+j.tc.Name] = r
+			if chartDefaults != nil && !loaded[j.rev+"/"+j.chart] {
+				loaded[j.rev+"/"+j.chart] = true
+				defaults[j.rev] = mergeInto(defaults[j.rev], chartDefaults)
+			}
+			done++
+			if d.opts.Progress != nil {
+				d.opts.Progress(Progress{Done: done, Total: len(jobs), Last: j.chart + " · " + j.tc.Name + " (" + j.rev + ")"})
+			}
+			return nil
+		})
 	}
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
 
-	report := &Report{Files: []FileDiff{}, ValueChanges: []ValueChange{}}
-	for _, chart := range charts {
-		for _, tc := range testCases {
+	report := &Report{Files: []FileDiff{}, ValueChanges: []ValueChange{}, Failures: []Failure{}}
+	for _, tc := range testCases {
+		baseErr, headErr := resolveErrs[baseName+"/"+tc.Name], resolveErrs[headName+"/"+tc.Name]
+		if f, failed := classify("", tc.Name, baseErr, headErr); failed {
+			report.Failures = append(report.Failures, f)
+			continue // without the applications of one side, every chart would look added or removed
+		}
+		for _, chart := range charts {
 			base, head := results[baseName+"/"+chart+"/"+tc.Name], results[headName+"/"+chart+"/"+tc.Name]
+			if f, failed := classify(chart, tc.Name, base.err, head.err); failed {
+				report.Failures = append(report.Failures, f)
+				continue
+			}
 			for _, path := range sortedKeys(mergeInto(mergeInto(nil, base.files), head.files)) {
 				oldText, inBase := base.files[path]
 				newText, inHead := head.files[path]
@@ -217,8 +245,35 @@ func (d *differ) run(ctx context.Context, charts []string, testCases []TestCase)
 			report.ValueChanges = append(report.ValueChanges, valueChanges(chart, tc.Name, base.values, head.values)...)
 		}
 	}
+	// A chart that loaded on one side only would show all its subcharts' default values as added or removed.
+	for _, chart := range charts {
+		if loaded[baseName+"/"+chart] != loaded[headName+"/"+chart] {
+			for name := range mergeInto(mergeInto(nil, defaults[baseName]), defaults[headName]) {
+				if strings.HasPrefix(name, chart+"_") {
+					delete(defaults[baseName], name)
+					delete(defaults[headName], name)
+				}
+			}
+		}
+	}
 	report.DefaultValuesDiff = defaultValuesDiff(defaults[baseName], defaults[headName])
 	return report, nil
+}
+
+// classify reports a chart (or, with an empty chart, a whole test case) that failed on either revision.
+func classify(chart, testCase string, baseErr, headErr error) (Failure, bool) {
+	f := Failure{Chart: chart, TestCase: testCase}
+	switch {
+	case baseErr == nil && headErr == nil:
+		return f, false
+	case headErr == nil:
+		f.Status, f.Error = Fixed, baseErr.Error()
+	case baseErr == nil:
+		f.Status, f.Error = Broken, headErr.Error()
+	default:
+		f.Status, f.Error = StillBroken, headErr.Error()
+	}
+	return f, true
 }
 
 // resolve finds the application that installs each chart in a revision for a test case.
@@ -268,24 +323,27 @@ func cutChartDir(dir string) (string, bool) {
 	return chart, ok && chart != "" && !strings.Contains(chart, "/")
 }
 
-func (d *differ) render(ctx context.Context, rev, chartDir, chart string, tc TestCase, app *overlay.App) (rendering, error) {
+// render renders one chart of a revision with one test case. A failure is part of the rendering, so one broken
+// chart does not end the diff. defaults are the chart's subcharts' default values, nil when it did not load.
+func (d *differ) render(ctx context.Context, rev, chartDir, chart string, tc TestCase, app *overlay.App) (r rendering, defaults map[string]string) {
 	ch, err := d.renderer.load(ctx, rev, chartDir)
 	if err != nil {
-		return rendering{}, err
+		return rendering{err: err}, nil
 	}
+	defaults = defaultValues(ch) // before rendering prunes the disabled dependencies
 	vals, err := overlay.HelmValues(app.Layers, app.Sets)
 	if err != nil {
-		return rendering{}, err
+		return rendering{err: err}, defaults
 	}
 	files, err := render(ch, "sx-"+chart, vals)
 	if err != nil {
-		return rendering{}, err
+		return rendering{err: err}, defaults
 	}
 	values, err := (&overlay.Overlay{TargetType: tc.Name}).Merge(*app, nil)
 	if err != nil {
-		return rendering{}, err
+		return rendering{err: err}, defaults
 	}
-	return rendering{files: files, values: values}, nil
+	return rendering{files: files, values: values}, defaults
 }
 
 // defaultValuesDiff diffs the subcharts' default values of both revisions, once for all test cases.

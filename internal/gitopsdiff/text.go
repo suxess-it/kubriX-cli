@@ -3,6 +3,7 @@ package gitopsdiff
 import (
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/suxess-it/kubrix-cli/internal/values/output"
@@ -16,6 +17,14 @@ func WriteText(w io.Writer, r *Report) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	if len(r.Failures) > 0 {
+		_, _ = fmt.Fprintln(tw, "FAILED\tSTATUS\tERROR")
+		for _, f := range r.Failures {
+			msg, _, _ := strings.Cut(f.Error, "\n")
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", FailureSubject(f), FailureLabel(f.Status), msg)
+		}
+		_, _ = fmt.Fprintln(tw)
+	}
 	if len(r.Files) > 0 {
 		_, _ = fmt.Fprintln(tw, "CHART\tTEST CASE\tFILES\tLINES")
 		for _, group := range groups(r.Files, byChartAndTestCase) {

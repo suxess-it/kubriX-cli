@@ -12,12 +12,12 @@ import (
 
 // drive feeds msg to the model and then the messages its commands produce, like bubbletea would.
 // Blink/tick commands that never finish on their own are cut off by the depth limit.
-func drive(m *model, msg tea.Msg, depth int) {
+func drive(m tea.Model, msg tea.Msg, depth int) {
 	_, cmd := m.Update(msg)
 	runCmd(m, cmd, depth)
 }
 
-func runCmd(m *model, cmd tea.Cmd, depth int) {
+func runCmd(m tea.Model, cmd tea.Cmd, depth int) {
 	if cmd == nil || depth == 0 {
 		return
 	}
@@ -30,6 +30,24 @@ func runCmd(m *model, cmd tea.Cmd, depth int) {
 	case tea.QuitMsg:
 	default:
 		drive(m, msg, depth-1)
+	}
+}
+
+// checkLayout asserts a full-screen view fills the terminal exactly: as many lines as rows, no line wider than the
+// terminal, and side-by-side boxes of the same height (their bottom borders on one line).
+func checkLayout(t *testing.T, view string, width, height int) {
+	t.Helper()
+	lines := strings.Split(view, "\n")
+	if len(lines) != height {
+		t.Errorf("view has %d lines, terminal has %d:\n%s", len(lines), height, view)
+	}
+	for i, l := range lines {
+		if w := ansi.StringWidth(l); w > width {
+			t.Errorf("line %d is %d wide, terminal is %d", i, w, width)
+		}
+	}
+	if bottom := lines[len(lines)-2]; strings.Count(bottom, "╰") != 2 {
+		t.Errorf("the boxes differ in height; second to last line: %q\n%s", bottom, view)
 	}
 }
 
@@ -51,9 +69,7 @@ func TestModelRendersStepsAndTranscript(t *testing.T) {
 			t.Errorf("view is missing %q:\n%s", want, view)
 		}
 	}
-	if lines := strings.Count(view, "\n") + 1; lines > 30 {
-		t.Errorf("view has %d lines, terminal has 30", lines)
-	}
+	checkLayout(t, view, 120, 30)
 }
 
 func TestModelFormRoundTrip(t *testing.T) {

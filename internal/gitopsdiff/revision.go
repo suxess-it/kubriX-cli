@@ -89,3 +89,99 @@ func chartNames(dirs ...string) ([]string, error) {
 	slices.Sort(names)
 	return names, nil
 }
+
+// BaseCandidates lists the revisions a change is usually compared against, the most likely first: the remote's
+// default branch, then local branches and the other remote branches.
+func BaseCandidates(ctx context.Context, repo string) ([]string, error) {
+	g := gitops.New(repo, "", "kubrix", "kubrix@localhost")
+	refs, err := g.Lines(ctx, "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes")
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	if def, err := g.Run(ctx, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && def != "" {
+		out = append(out, def)
+	}
+	for _, r := range refs {
+		// "origin" is how for-each-ref shortens refs/remotes/origin/HEAD.
+		if r == "origin" || strings.HasSuffix(r, "/HEAD") || slices.Contains(out, r) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// Choices is what a diff of a change can render: the target types and charts of either revision, and the charts the
+// change touches (all of them when it touches the target chart, a bootstrap Application or no chart).
+type Choices struct {
+	TargetTypes []string
+	Charts      []string
+	Changed     []string
+}
+
+// ListChoices finds the choices of comparing head (empty: the working tree) against base, reading git trees and the
+// working tree without checking anything out.
+func ListChoices(ctx context.Context, repo, base, head string) (Choices, error) {
+	g := gitops.New(repo, "", "kubrix", "kubrix@localhost")
+	var paths []string
+	for _, rev := range []string{base, head} {
+		if rev == "" {
+			continue
+		}
+		// ls-tree takes paths, not patterns: list the root for the bootstrap Applications.
+		root, err := g.Lines(ctx, "ls-tree", "--name-only", rev)
+		if err != nil {
+			return Choices{}, fmt.Errorf("list %s: %w", rev, err)
+		}
+		files, err := g.Lines(ctx, "ls-tree", "-r", "--name-only", rev, "--", targetchart.Dir, ChartsDir)
+		if err != nil {
+			return Choices{}, fmt.Errorf("list %s: %w", rev, err)
+		}
+		paths = append(append(paths, root...), files...)
+	}
+	targetTypes := targetchart.TargetTypesOf(paths)
+	charts := chartsOf(paths)
+	if head == "" {
+		types, err := targetchart.TargetTypes(repo)
+		if err != nil {
+			return Choices{}, err
+		}
+		names, err := chartNames(repo)
+		if err != nil {
+			return Choices{}, err
+		}
+		targetTypes = union(targetTypes, types)
+		charts = union(charts, names)
+	}
+	files, err := changedFiles(ctx, g, base, head)
+	if err != nil {
+		return Choices{}, err
+	}
+	return Choices{TargetTypes: targetTypes, Charts: charts, Changed: changedCharts(files, charts)}, nil
+}
+
+// chartsOf names the chart directories that paths lie in.
+func chartsOf(paths []string) []string {
+	var charts []string
+	for _, p := range paths {
+		if rest, ok := strings.CutPrefix(p, ChartsDir+"/"); ok {
+			if chart, _, ok := strings.Cut(rest, "/"); ok && !slices.Contains(charts, chart) {
+				charts = append(charts, chart)
+			}
+		}
+	}
+	slices.Sort(charts)
+	return charts
+}
+
+func union(a, b []string) []string {
+	out := slices.Clone(a)
+	for _, s := range b {
+		if !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	slices.Sort(out)
+	return out
+}

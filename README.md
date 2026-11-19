@@ -187,8 +187,19 @@ the rendered manifests per test case, the subcharts' default values, and the eff
 that now set them. By default the test cases are all target types, so every chart is rendered with exactly the values
 files and parameters Argo CD would give it.
 
+In a terminal the result opens in a viewer: a tree of charts, test cases and files next to the coloured diff, plus
+the failures, changed values, default values and Helm's warnings (`n`/`p` next/previous file, `/` filter, `tab`
+switches between tree and diff). Without `--base` it first asks which revision to compare against, then which test
+cases and charts to render: every target type and the charts the change touches are selected, or what `--target-type`,
+`--test-case` and `--charts` name. `r` in the result changes the selection and renders again. `--plain`,
+`--format`, `--output-dir` and `--pr` print instead, as does any output that is not a terminal.
+
+A chart that fails to render does not stop the diff. It is reported as broken by the change, already broken on the
+base, or fixed by the change; only a failure the change introduces makes `kubrix diff` exit with code 2.
+
 ```bash
-kubrix diff --base origin/main                                    # the working tree against main
+kubrix diff                                                       # asks for the base, then opens the viewer
+kubrix diff --base origin/main --plain                            # the working tree against main, as text
 kubrix diff --base origin/main --head my-branch --target-type kind --charts grafana
 kubrix diff --base origin/main --format markdown --output-dir out # PR comments and the full diff as files
 kubrix diff --base origin/main --pr 123 --dry-run                 # what would be posted to the PR
