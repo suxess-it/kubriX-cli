@@ -44,7 +44,7 @@ sboms:
   - artifacts: archive
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     # this name template makes the OS and Arch compatible with the results of uname.
     name_template: >-
       {{ .ProjectName }}_
@@ -56,19 +56,25 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
-brews:
+homebrew_casks:
   - name: kubrix
     homepage: https://kubrix.io
-    directory: Formula
     repository:
       owner: suxess-it
       name: kubrix-cli
       branch: main
+    # the binary is not signed and notarized, so macOS would quarantine it
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/kubrix"]
+          end
 
 checksum:
   name_template: "checksums.txt"
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
