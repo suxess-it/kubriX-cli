@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.7](https://github.com/suxess-it/kubriX-cli/compare/v0.1.6...v0.1.7) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deps:** update module go.yaml.in/yaml/v3 to v3.0.6 ([5dd30d0](https://github.com/suxess-it/kubriX-cli/commit/5dd30d06aa7bcf4cc71e698e07ed6ed4733921cc))
+* **deps:** update module go.yaml.in/yaml/v3 to v3.0.6 ([b98f245](https://github.com/suxess-it/kubriX-cli/commit/b98f2457bee660eb423d20b65b384837b12e5627))
+
+
+### Other
+
+* move GoReleaser config off deprecated options ([58b6bee](https://github.com/suxess-it/kubriX-cli/commit/58b6bee627b72e1a1d9857c49fd86692758ed7b6))
+* move GoReleaser config off deprecated options ([42c8350](https://github.com/suxess-it/kubriX-cli/commit/42c8350586a7a8a0129fc48f0913963b8299d928))
+
 ## [0.1.6](https://github.com/suxess-it/kubriX-cli/compare/v0.1.5...v0.1.6) (2026-11-19)
 
 
