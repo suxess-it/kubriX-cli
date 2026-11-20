@@ -24,7 +24,7 @@ Keep **Target** (a cluster) and **Target type** (a kubriX profile) apart in code
   reviewed contract change.
 - **Releases are generated.** PR titles are Conventional Commits (`feat:`, `fix:`, `chore:`, …), enforced by
   `semantic_pr.yaml`; release-please derives the version and changelog from them. `CHANGELOG.md`,
-  `.release-please-manifest.json` and `Formula/` change only through the release workflow.
+  `.release-please-manifest.json` and `Casks/` change only through the release workflow.
 - **Experimental commands** are hidden and gated by `KUBRIX_EXPERIMENTAL=1` (`cmd/features.go`); a command
   graduates by dropping the gate.
 
