@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.7](https://github.com/suxess-it/kubriX-cli/compare/v0.1.6...v0.1.7) (2026-11-28)
+
+
+### Bug Fixes
+
+* **deps:** update module charm.land/bubbles/v2 to v2.2.2 ([#29](https://github.com/suxess-it/kubriX-cli/issues/29)) ([2248239](https://github.com/suxess-it/kubriX-cli/commit/2248239933d81be398c537e8e53b17d9743f1b7c))
+* **deps:** update module charm.land/bubbletea/v2 to v2.1.3 ([#33](https://github.com/suxess-it/kubriX-cli/issues/33)) ([92b9189](https://github.com/suxess-it/kubriX-cli/commit/92b918971ee1a828f93c17ebcb369a5339dfa738))
+* **deps:** update module go.yaml.in/yaml/v3 to v3.0.6 ([5dd30d0](https://github.com/suxess-it/kubriX-cli/commit/5dd30d06aa7bcf4cc71e698e07ed6ed4733921cc))
+* **deps:** update module go.yaml.in/yaml/v3 to v3.0.6 ([b98f245](https://github.com/suxess-it/kubriX-cli/commit/b98f2457bee660eb423d20b65b384837b12e5627))
+
+
+### Other
+
+* **deps:** update amannn/action-semantic-pull-request action to v6.1.3 ([#30](https://github.com/suxess-it/kubriX-cli/issues/30)) ([8c672d0](https://github.com/suxess-it/kubriX-cli/commit/8c672d0b112f997bd52571c7128f65c404599417))
+* **deps:** update amannn/action-semantic-pull-request action to v6.1.4 ([#32](https://github.com/suxess-it/kubriX-cli/issues/32)) ([cd5db01](https://github.com/suxess-it/kubriX-cli/commit/cd5db01afcd8d1cf867797bfcd6eb41c4a3f77d9))
+* **deps:** update anchore/sbom-action action to v0.24.4 ([#31](https://github.com/suxess-it/kubriX-cli/issues/31)) ([30f90a1](https://github.com/suxess-it/kubriX-cli/commit/30f90a1b8b5b45976f35fc1998ab18987f9d60f9))
+* move GoReleaser config off deprecated options ([58b6bee](https://github.com/suxess-it/kubriX-cli/commit/58b6bee627b72e1a1d9857c49fd86692758ed7b6))
+* move GoReleaser config off deprecated options ([42c8350](https://github.com/suxess-it/kubriX-cli/commit/42c8350586a7a8a0129fc48f0913963b8299d928))
+
 ## [0.1.6](https://github.com/suxess-it/kubriX-cli/compare/v0.1.5...v0.1.6) (2026-11-19)
 
 
